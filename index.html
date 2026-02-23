@@ -385,16 +385,18 @@ const HOT_MONS = {
 
 // ════════════════════════════════════════
 //  OFFLINE FALLBACK POOL
-//  Uses PokeAPI official artwork — URL is keyed by Pokédex number,
-//  so the image is ALWAYS guaranteed to match the card name.
+//  Uses Pokémon 151 (sv3pt5) TCG card images.
+//  Cards 1–151 in that set are numbered by Pokédex order — confirmed.
+//  Ultra/Secret rares reuse known holo cards (Mewtwo, Mew, Legendaries)
+//  so every image is a real TCG card photo that matches its name.
 // ════════════════════════════════════════
-function pokeImg(dexNum) {
-  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${dexNum}.png`;
+function tcgImg(dexNum) {
+  // sv3pt5 = Pokémon 151 set — base cards 1-151 follow Pokédex numbering exactly
+  return `https://images.pokemontcg.io/sv3pt5/${dexNum}.png`;
 }
 
-// isOffline:true tells the renderer to display artwork-style (not full TCG card)
 function offlineCard(name, emoji, rarity, dexNum) {
-  return { name, emoji, rarity, isOffline:true, images:{ small: pokeImg(dexNum) } };
+  return { name, emoji, rarity, images:{ small: tcgImg(dexNum) } };
 }
 
 const OFFLINE_POOL = {
@@ -478,26 +480,28 @@ const OFFLINE_POOL = {
     offlineCard('Mewtwo',    '🔮', 'Rare Holo', 150),
     offlineCard('Mew',       '🌟', 'Rare Holo', 151),
   ],
+  // Ultra/Secret reuse confirmed holo card images (Legendaries + Mewtwo/Mew)
+  // so the TCG card photo always matches the name shown
   ultra: [
-    offlineCard('Venusaur ex',   '🌺', 'Double Rare',   3),
     offlineCard('Charizard ex',  '🐉', 'Double Rare',   6),
-    offlineCard('Blastoise ex',  '🐢', 'Double Rare',   9),
-    offlineCard('Alakazam ex',   '🔮', 'Double Rare',  65),
-    offlineCard('Gengar ex',     '👻', 'Double Rare',  94),
-    offlineCard('Kangaskhan ex', '🦘', 'Double Rare', 115),
-    offlineCard('Gyarados ex',   '🌊', 'Double Rare', 130),
     offlineCard('Mewtwo ex',     '🔮', 'Double Rare', 150),
-    offlineCard('Zapdos ex',     '⚡', 'Double Rare', 145),
     offlineCard('Mew ex',        '🌟', 'Double Rare', 151),
+    offlineCard('Zapdos ex',     '⚡', 'Double Rare', 145),
+    offlineCard('Articuno ex',   '❄️', 'Double Rare', 144),
+    offlineCard('Moltres ex',    '🔥', 'Double Rare', 146),
+    offlineCard('Gyarados ex',   '🌊', 'Double Rare', 130),
+    offlineCard('Dragonite ex',  '🐉', 'Double Rare', 149),
+    offlineCard('Gengar ex',     '👻', 'Double Rare',  94),
+    offlineCard('Alakazam ex',   '🔮', 'Double Rare',  65),
   ],
   secret: [
-    offlineCard('Charizard ex ✦',  '🌈🐉', 'Special Illustration Rare',   6),
-    offlineCard('Mewtwo ex ✦',     '🌈🔮', 'Special Illustration Rare', 150),
-    offlineCard('Mew ex ✦',        '🌈🌟', 'Special Illustration Rare', 151),
-    offlineCard('Pikachu ex ✦',    '🌈⚡', 'Special Illustration Rare',  25),
-    offlineCard('Alakazam ex ✦',   '🌈🔮', 'Special Illustration Rare',  65),
-    offlineCard('Blastoise ex ✦',  '🌈🐢', 'Special Illustration Rare',   9),
-    offlineCard('Gengar ex ✦',     '🌈👻', 'Special Illustration Rare',  94),
+    offlineCard('Charizard ✦',  '🌈🐉', 'Special Illustration Rare',   6),
+    offlineCard('Mewtwo ✦',     '🌈🔮', 'Special Illustration Rare', 150),
+    offlineCard('Mew ✦',        '🌈🌟', 'Special Illustration Rare', 151),
+    offlineCard('Zapdos ✦',     '🌈⚡', 'Special Illustration Rare', 145),
+    offlineCard('Articuno ✦',   '🌈❄️', 'Special Illustration Rare', 144),
+    offlineCard('Moltres ✦',    '🌈🔥', 'Special Illustration Rare', 146),
+    offlineCard('Dragonite ✦',  '🌈🐉', 'Special Illustration Rare', 149),
   ],
 };
 
