@@ -165,6 +165,14 @@
     .inv-img-placeholder { width:100%; aspect-ratio:0.715; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.3rem; padding:.5rem; background:var(--card2); text-align:center; }
     .inv-img-placeholder .em { font-size:2rem; }
     .inv-img-placeholder .nm { font-size:.6rem; font-weight:900; }
+    /* Offline artwork frame — used in both pack opening and collection */
+    .artwork-frame { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:.3rem; gap:.15rem; position:relative; }
+    .artwork-img { width:82%; flex:1; object-fit:contain; filter:drop-shadow(0 2px 6px rgba(0,0,0,.6)); min-height:0; }
+    .artwork-name { font-size:.6rem; font-weight:900; text-align:center; line-height:1.2; text-shadow:0 1px 3px #000; }
+    .artwork-rar  { font-size:.52rem; font-weight:800; text-shadow:0 1px 3px #000; }
+    /* Collection artwork card */
+    .inv-artwork-wrap { width:100%; aspect-ratio:0.715; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:.4rem .3rem .2rem; gap:.2rem; }
+    .inv-artwork-img { width:85%; flex:1; object-fit:contain; filter:drop-shadow(0 2px 5px rgba(0,0,0,.5)); min-height:0; }
     .inv-info { padding:.35rem .4rem .4rem; background:rgba(0,0,0,.6); backdrop-filter:blur(4px); }
     .inv-name { font-size:.62rem; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .inv-meta { display:flex; justify-content:space-between; align-items:center; margin-top:.15rem; }
@@ -377,114 +385,119 @@ const HOT_MONS = {
 
 // ════════════════════════════════════════
 //  OFFLINE FALLBACK POOL
-//  Using Pokemon 151 (sv3pt5) — cards numbered by Pokedex order
+//  Uses PokeAPI official artwork — URL is keyed by Pokédex number,
+//  so the image is ALWAYS guaranteed to match the card name.
 // ════════════════════════════════════════
-function cdnImg(set, num) {
-  return `https://images.pokemontcg.io/${set}/${num}.png`;
+function pokeImg(dexNum) {
+  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${dexNum}.png`;
 }
-const P151 = 'sv3pt5';
+
+// isOffline:true tells the renderer to display artwork-style (not full TCG card)
+function offlineCard(name, emoji, rarity, dexNum) {
+  return { name, emoji, rarity, isOffline:true, images:{ small: pokeImg(dexNum) } };
+}
 
 const OFFLINE_POOL = {
   common: [
-    {name:'Bulbasaur',  emoji:'🌿', rarity:'Common', images:{small:cdnImg(P151,1)}},
-    {name:'Ivysaur',    emoji:'🌿', rarity:'Common', images:{small:cdnImg(P151,2)}},
-    {name:'Charmander', emoji:'🔥', rarity:'Common', images:{small:cdnImg(P151,4)}},
-    {name:'Charmeleon', emoji:'🔥', rarity:'Common', images:{small:cdnImg(P151,5)}},
-    {name:'Squirtle',   emoji:'💧', rarity:'Common', images:{small:cdnImg(P151,7)}},
-    {name:'Wartortle',  emoji:'💧', rarity:'Common', images:{small:cdnImg(P151,8)}},
-    {name:'Caterpie',   emoji:'🐛', rarity:'Common', images:{small:cdnImg(P151,10)}},
-    {name:'Metapod',    emoji:'🐛', rarity:'Common', images:{small:cdnImg(P151,11)}},
-    {name:'Pidgey',     emoji:'🐦', rarity:'Common', images:{small:cdnImg(P151,16)}},
-    {name:'Pidgeotto',  emoji:'🐦', rarity:'Common', images:{small:cdnImg(P151,17)}},
-    {name:'Rattata',    emoji:'🐭', rarity:'Common', images:{small:cdnImg(P151,19)}},
-    {name:'Ekans',      emoji:'🐍', rarity:'Common', images:{small:cdnImg(P151,23)}},
-    {name:'Sandshrew',  emoji:'🏔', rarity:'Common', images:{small:cdnImg(P151,27)}},
-    {name:'Clefairy',   emoji:'⭐', rarity:'Common', images:{small:cdnImg(P151,35)}},
-    {name:'Vulpix',     emoji:'🦊', rarity:'Common', images:{small:cdnImg(P151,37)}},
-    {name:'Jigglypuff', emoji:'🎵', rarity:'Common', images:{small:cdnImg(P151,39)}},
-    {name:'Oddish',     emoji:'🌿', rarity:'Common', images:{small:cdnImg(P151,43)}},
-    {name:'Paras',      emoji:'🍄', rarity:'Common', images:{small:cdnImg(P151,46)}},
-    {name:'Meowth',     emoji:'🐱', rarity:'Common', images:{small:cdnImg(P151,52)}},
-    {name:'Psyduck',    emoji:'💧', rarity:'Common', images:{small:cdnImg(P151,54)}},
-    {name:'Mankey',     emoji:'🐒', rarity:'Common', images:{small:cdnImg(P151,56)}},
-    {name:'Growlithe',  emoji:'🔥', rarity:'Common', images:{small:cdnImg(P151,58)}},
-    {name:'Poliwag',    emoji:'💧', rarity:'Common', images:{small:cdnImg(P151,60)}},
-    {name:'Abra',       emoji:'🔮', rarity:'Common', images:{small:cdnImg(P151,63)}},
-    {name:'Machop',     emoji:'💪', rarity:'Common', images:{small:cdnImg(P151,66)}},
-    {name:'Bellsprout', emoji:'🌱', rarity:'Common', images:{small:cdnImg(P151,69)}},
-    {name:'Tentacool',  emoji:'🪼', rarity:'Common', images:{small:cdnImg(P151,72)}},
-    {name:'Geodude',    emoji:'🪨', rarity:'Common', images:{small:cdnImg(P151,74)}},
-    {name:'Ponyta',     emoji:'🐴', rarity:'Common', images:{small:cdnImg(P151,77)}},
-    {name:'Slowpoke',   emoji:'🌀', rarity:'Common', images:{small:cdnImg(P151,79)}},
-    {name:'Magikarp',   emoji:'🐟', rarity:'Common', images:{small:cdnImg(P151,129)}},
-    {name:'Eevee',      emoji:'🦊', rarity:'Common', images:{small:cdnImg(P151,133)}},
-    {name:'Dratini',    emoji:'🐲', rarity:'Common', images:{small:cdnImg(P151,147)}},
+    offlineCard('Bulbasaur',  '🌿', 'Common',   1),
+    offlineCard('Ivysaur',    '🌿', 'Common',   2),
+    offlineCard('Charmander', '🔥', 'Common',   4),
+    offlineCard('Charmeleon', '🔥', 'Common',   5),
+    offlineCard('Squirtle',   '💧', 'Common',   7),
+    offlineCard('Wartortle',  '💧', 'Common',   8),
+    offlineCard('Caterpie',   '🐛', 'Common',  10),
+    offlineCard('Metapod',    '🐛', 'Common',  11),
+    offlineCard('Pidgey',     '🐦', 'Common',  16),
+    offlineCard('Pidgeotto',  '🐦', 'Common',  17),
+    offlineCard('Rattata',    '🐭', 'Common',  19),
+    offlineCard('Ekans',      '🐍', 'Common',  23),
+    offlineCard('Sandshrew',  '🏔', 'Common',  27),
+    offlineCard('Clefairy',   '⭐', 'Common',  35),
+    offlineCard('Vulpix',     '🦊', 'Common',  37),
+    offlineCard('Jigglypuff', '🎵', 'Common',  39),
+    offlineCard('Oddish',     '🌿', 'Common',  43),
+    offlineCard('Paras',      '🍄', 'Common',  46),
+    offlineCard('Meowth',     '🐱', 'Common',  52),
+    offlineCard('Psyduck',    '💧', 'Common',  54),
+    offlineCard('Mankey',     '🐒', 'Common',  56),
+    offlineCard('Growlithe',  '🔥', 'Common',  58),
+    offlineCard('Poliwag',    '💧', 'Common',  60),
+    offlineCard('Abra',       '🔮', 'Common',  63),
+    offlineCard('Machop',     '💪', 'Common',  66),
+    offlineCard('Bellsprout', '🌱', 'Common',  69),
+    offlineCard('Tentacool',  '🪼', 'Common',  72),
+    offlineCard('Geodude',    '🪨', 'Common',  74),
+    offlineCard('Ponyta',     '🐴', 'Common',  77),
+    offlineCard('Slowpoke',   '🌀', 'Common',  79),
+    offlineCard('Magikarp',   '🐟', 'Common', 129),
+    offlineCard('Eevee',      '🦊', 'Common', 133),
+    offlineCard('Dratini',    '🐲', 'Common', 147),
   ],
   uncommon: [
-    {name:'Venomoth',   emoji:'🦋', rarity:'Uncommon', images:{small:cdnImg(P151,49)}},
-    {name:'Dugtrio',    emoji:'🏔', rarity:'Uncommon', images:{small:cdnImg(P151,51)}},
-    {name:'Persian',    emoji:'🐱', rarity:'Uncommon', images:{small:cdnImg(P151,53)}},
-    {name:'Golduck',    emoji:'💧', rarity:'Uncommon', images:{small:cdnImg(P151,55)}},
-    {name:'Primeape',   emoji:'🐒', rarity:'Uncommon', images:{small:cdnImg(P151,57)}},
-    {name:'Arcanine',   emoji:'🔥', rarity:'Uncommon', images:{small:cdnImg(P151,59)}},
-    {name:'Poliwhirl',  emoji:'💧', rarity:'Uncommon', images:{small:cdnImg(P151,61)}},
-    {name:'Kadabra',    emoji:'🔮', rarity:'Uncommon', images:{small:cdnImg(P151,64)}},
-    {name:'Machoke',    emoji:'💪', rarity:'Uncommon', images:{small:cdnImg(P151,67)}},
-    {name:'Haunter',    emoji:'👻', rarity:'Uncommon', images:{small:cdnImg(P151,93)}},
-    {name:'Chansey',    emoji:'🥚', rarity:'Uncommon', images:{small:cdnImg(P151,113)}},
-    {name:'Scyther',    emoji:'🗡', rarity:'Uncommon', images:{small:cdnImg(P151,123)}},
-    {name:'Jynx',       emoji:'💋', rarity:'Uncommon', images:{small:cdnImg(P151,124)}},
-    {name:'Electabuzz', emoji:'⚡', rarity:'Uncommon', images:{small:cdnImg(P151,125)}},
-    {name:'Magmar',     emoji:'🔥', rarity:'Uncommon', images:{small:cdnImg(P151,126)}},
-    {name:'Lapras',     emoji:'🦕', rarity:'Uncommon', images:{small:cdnImg(P151,131)}},
-    {name:'Snorlax',    emoji:'😴', rarity:'Uncommon', images:{small:cdnImg(P151,143)}},
-    {name:'Dragonair',  emoji:'🐲', rarity:'Uncommon', images:{small:cdnImg(P151,148)}},
+    offlineCard('Venomoth',   '🦋', 'Uncommon',  49),
+    offlineCard('Dugtrio',    '🏔', 'Uncommon',  51),
+    offlineCard('Persian',    '🐱', 'Uncommon',  53),
+    offlineCard('Golduck',    '💧', 'Uncommon',  55),
+    offlineCard('Primeape',   '🐒', 'Uncommon',  57),
+    offlineCard('Arcanine',   '🔥', 'Uncommon',  59),
+    offlineCard('Poliwhirl',  '💧', 'Uncommon',  61),
+    offlineCard('Kadabra',    '🔮', 'Uncommon',  64),
+    offlineCard('Machoke',    '💪', 'Uncommon',  67),
+    offlineCard('Haunter',    '👻', 'Uncommon',  93),
+    offlineCard('Chansey',    '🥚', 'Uncommon', 113),
+    offlineCard('Scyther',    '🗡', 'Uncommon', 123),
+    offlineCard('Jynx',       '💋', 'Uncommon', 124),
+    offlineCard('Electabuzz', '⚡', 'Uncommon', 125),
+    offlineCard('Magmar',     '🔥', 'Uncommon', 126),
+    offlineCard('Lapras',     '🦕', 'Uncommon', 131),
+    offlineCard('Snorlax',    '😴', 'Uncommon', 143),
+    offlineCard('Dragonair',  '🐲', 'Uncommon', 148),
   ],
   rare: [
-    {name:'Venusaur',   emoji:'🌺', rarity:'Rare', images:{small:cdnImg(P151,3)}},
-    {name:'Charizard',  emoji:'🐉', rarity:'Rare', images:{small:cdnImg(P151,6)}},
-    {name:'Blastoise',  emoji:'🐢', rarity:'Rare', images:{small:cdnImg(P151,9)}},
-    {name:'Butterfree', emoji:'🦋', rarity:'Rare', images:{small:cdnImg(P151,12)}},
-    {name:'Alakazam',   emoji:'🥄', rarity:'Rare', images:{small:cdnImg(P151,65)}},
-    {name:'Machamp',    emoji:'💪', rarity:'Rare', images:{small:cdnImg(P151,68)}},
-    {name:'Gengar',     emoji:'👻', rarity:'Rare', images:{small:cdnImg(P151,94)}},
-    {name:'Gyarados',   emoji:'🌊', rarity:'Rare', images:{small:cdnImg(P151,130)}},
-    {name:'Vaporeon',   emoji:'💧', rarity:'Rare', images:{small:cdnImg(P151,134)}},
-    {name:'Jolteon',    emoji:'⚡', rarity:'Rare', images:{small:cdnImg(P151,135)}},
-    {name:'Flareon',    emoji:'🔥', rarity:'Rare', images:{small:cdnImg(P151,136)}},
-    {name:'Aerodactyl', emoji:'🦕', rarity:'Rare', images:{small:cdnImg(P151,142)}},
-    {name:'Dragonite',  emoji:'🐉', rarity:'Rare', images:{small:cdnImg(P151,149)}},
+    offlineCard('Venusaur',   '🌺', 'Rare',   3),
+    offlineCard('Charizard',  '🐉', 'Rare',   6),
+    offlineCard('Blastoise',  '🐢', 'Rare',   9),
+    offlineCard('Butterfree', '🦋', 'Rare',  12),
+    offlineCard('Alakazam',   '🥄', 'Rare',  65),
+    offlineCard('Machamp',    '💪', 'Rare',  68),
+    offlineCard('Gengar',     '👻', 'Rare',  94),
+    offlineCard('Gyarados',   '🌊', 'Rare', 130),
+    offlineCard('Vaporeon',   '💧', 'Rare', 134),
+    offlineCard('Jolteon',    '⚡', 'Rare', 135),
+    offlineCard('Flareon',    '🔥', 'Rare', 136),
+    offlineCard('Aerodactyl', '🦕', 'Rare', 142),
+    offlineCard('Dragonite',  '🐉', 'Rare', 149),
   ],
   holo: [
-    {name:'Raichu',     emoji:'⚡', rarity:'Rare Holo', images:{small:cdnImg(P151,26)}},
-    {name:'Ninetales',  emoji:'🦊', rarity:'Rare Holo', images:{small:cdnImg(P151,38)}},
-    {name:'Clefable',   emoji:'⭐', rarity:'Rare Holo', images:{small:cdnImg(P151,36)}},
-    {name:'Articuno',   emoji:'❄️', rarity:'Rare Holo', images:{small:cdnImg(P151,144)}},
-    {name:'Zapdos',     emoji:'⚡', rarity:'Rare Holo', images:{small:cdnImg(P151,145)}},
-    {name:'Moltres',    emoji:'🔥', rarity:'Rare Holo', images:{small:cdnImg(P151,146)}},
-    {name:'Mewtwo',     emoji:'🔮', rarity:'Rare Holo', images:{small:cdnImg(P151,150)}},
-    {name:'Mew',        emoji:'🌟', rarity:'Rare Holo', images:{small:cdnImg(P151,151)}},
+    offlineCard('Raichu',    '⚡', 'Rare Holo',  26),
+    offlineCard('Ninetales', '🦊', 'Rare Holo',  38),
+    offlineCard('Clefable',  '⭐', 'Rare Holo',  36),
+    offlineCard('Articuno',  '❄️', 'Rare Holo', 144),
+    offlineCard('Zapdos',    '⚡', 'Rare Holo', 145),
+    offlineCard('Moltres',   '🔥', 'Rare Holo', 146),
+    offlineCard('Mewtwo',    '🔮', 'Rare Holo', 150),
+    offlineCard('Mew',       '🌟', 'Rare Holo', 151),
   ],
   ultra: [
-    {name:'Venusaur ex',  emoji:'🌺', rarity:'Double Rare', images:{small:cdnImg(P151,182)}},
-    {name:'Charizard ex', emoji:'🐉', rarity:'Double Rare', images:{small:cdnImg(P151,183)}},
-    {name:'Blastoise ex', emoji:'🐢', rarity:'Double Rare', images:{small:cdnImg(P151,184)}},
-    {name:'Alakazam ex',  emoji:'🔮', rarity:'Double Rare', images:{small:cdnImg(P151,186)}},
-    {name:'Gengar ex',    emoji:'👻', rarity:'Double Rare', images:{small:cdnImg(P151,187)}},
-    {name:'Kangaskhan ex',emoji:'🦘', rarity:'Double Rare', images:{small:cdnImg(P151,188)}},
-    {name:'Gyarados ex',  emoji:'🌊', rarity:'Double Rare', images:{small:cdnImg(P151,189)}},
-    {name:'Mewtwo ex',    emoji:'🔮', rarity:'Double Rare', images:{small:cdnImg(P151,193)}},
-    {name:'Zapdos ex',    emoji:'⚡', rarity:'Double Rare', images:{small:cdnImg(P151,191)}},
-    {name:'Mew ex',       emoji:'🌟', rarity:'Double Rare', images:{small:cdnImg(P151,192)}},
+    offlineCard('Venusaur ex',   '🌺', 'Double Rare',   3),
+    offlineCard('Charizard ex',  '🐉', 'Double Rare',   6),
+    offlineCard('Blastoise ex',  '🐢', 'Double Rare',   9),
+    offlineCard('Alakazam ex',   '🔮', 'Double Rare',  65),
+    offlineCard('Gengar ex',     '👻', 'Double Rare',  94),
+    offlineCard('Kangaskhan ex', '🦘', 'Double Rare', 115),
+    offlineCard('Gyarados ex',   '🌊', 'Double Rare', 130),
+    offlineCard('Mewtwo ex',     '🔮', 'Double Rare', 150),
+    offlineCard('Zapdos ex',     '⚡', 'Double Rare', 145),
+    offlineCard('Mew ex',        '🌟', 'Double Rare', 151),
   ],
   secret: [
-    {name:'Charizard ex SIR',  emoji:'🌈🐉', rarity:'Special Illustration Rare', images:{small:cdnImg(P151,199)}},
-    {name:'Mewtwo ex SIR',     emoji:'🌈🔮', rarity:'Special Illustration Rare', images:{small:cdnImg(P151,205)}},
-    {name:'Mew ex SIR',        emoji:'🌈🌟', rarity:'Special Illustration Rare', images:{small:cdnImg(P151,202)}},
-    {name:'Pikachu ex SIR',    emoji:'🌈⚡', rarity:'Special Illustration Rare', images:{small:cdnImg(P151,203)}},
-    {name:'Alakazam ex SIR',   emoji:'🌈🔮', rarity:'Special Illustration Rare', images:{small:cdnImg(P151,196)}},
-    {name:'Gold Blastoise',    emoji:'💎🐢', rarity:'Hyper Rare',                images:{small:cdnImg(P151,206)}},
-    {name:'Gold Charizard',    emoji:'💎🐉', rarity:'Hyper Rare',                images:{small:cdnImg(P151,207)}},
+    offlineCard('Charizard ex ✦',  '🌈🐉', 'Special Illustration Rare',   6),
+    offlineCard('Mewtwo ex ✦',     '🌈🔮', 'Special Illustration Rare', 150),
+    offlineCard('Mew ex ✦',        '🌈🌟', 'Special Illustration Rare', 151),
+    offlineCard('Pikachu ex ✦',    '🌈⚡', 'Special Illustration Rare',  25),
+    offlineCard('Alakazam ex ✦',   '🌈🔮', 'Special Illustration Rare',  65),
+    offlineCard('Blastoise ex ✦',  '🌈🐢', 'Special Illustration Rare',   9),
+    offlineCard('Gengar ex ✦',     '🌈👻', 'Special Illustration Rare',  94),
   ],
 };
 
@@ -758,18 +771,28 @@ function openModal(setName) {
 
   document.getElementById('flipGrid').innerHTML = S.pending.map((c,i) => {
     const tc = TIER[c.tier];
+    // isOffline cards use PokeAPI artwork (transparent PNG) — display in a styled frame
+    // API cards use the full TCG card image — display cover-fit
+    const frontInner = c.isOffline
+      ? `<div class="artwork-frame" style="background:linear-gradient(160deg,${tc.color}55 0%,#0d0d20 70%)">
+           <img src="${c.images?.small||''}" alt="${c.name}" loading="lazy" class="artwork-img"
+                onerror="this.style.display='none'">
+           <div class="artwork-name">${c.name}</div>
+           <div class="artwork-rar" style="color:${tc.color}">${tc.label}</div>
+         </div>`
+      : `<img src="${c.images?.small||''}" alt="${c.name}" loading="lazy"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <div class="card-css" style="display:none;background:linear-gradient(145deg,${tc.color}33,${tc.color}11)">
+           <div class="mon-emoji">${c.emoji||'🃏'}</div>
+           <div class="mon-name">${c.name}</div>
+           <div class="mon-rar" style="color:${tc.color}">${tc.label}</div>
+         </div>`;
     return `
       <div class="flip-slot tier-${c.tier}" id="fs${i}" onclick="flipCard(${i})">
         <div class="flip-inner">
           <div class="flip-face flip-back"><div class="pokeball"></div></div>
           <div class="flip-face flip-front">
-            <img src="${c.images?.small||''}" alt="${c.name}" loading="lazy"
-                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-            <div class="card-css" style="display:none;background:linear-gradient(145deg,${tc.color}33,${tc.color}11)">
-              <div class="mon-emoji">${c.emoji||'🃏'}</div>
-              <div class="mon-name">${c.name}</div>
-              <div class="mon-rar" style="color:${tc.color}">${tc.label}</div>
-            </div>
+            ${frontInner}
             <div class="rarity-badge" style="color:${tc.color}">${tc.label}</div>
             <div class="val-badge">${fmt(c.value)}</div>
           </div>
@@ -874,16 +897,23 @@ function renderCollection() {
   grid.innerHTML = cards.map(c => {
     const tc = TIER[c.tier];
     const sellTxt = (c.tier==='common'||c.tier==='uncommon') ? '#000' : '#fff';
+    // Offline cards: show artwork in a styled frame so name always matches image
+    const imgSection = c.isOffline
+      ? `<div class="inv-artwork-wrap" style="background:linear-gradient(160deg,${tc.color}44 0%,#0d0d20 80%)">
+           <img class="inv-artwork-img" src="${c.images?.small||''}" alt="${c.name}" loading="lazy"
+                onerror="this.style.display='none'">
+         </div>`
+      : `<img class="inv-img" src="${c.images?.small||''}" alt="${c.name}" loading="lazy"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <div class="inv-img-placeholder" style="display:none;background:${tc.color}18">
+           <div class="em">${c.emoji||'🃏'}</div>
+           <div class="nm">${c.name}</div>
+         </div>`;
     return `
       <div class="inv-card tier-${c.tier}${selected.has(c.uid)?' selected':''}"
            id="ic${c.uid}" onclick="toggleSel(${c.uid})">
         <div class="inv-check">✓</div>
-        <img class="inv-img" src="${c.images?.small||''}" alt="${c.name}" loading="lazy"
-             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-        <div class="inv-img-placeholder" style="display:none;background:${tc.color}18">
-          <div class="em">${c.emoji||'🃏'}</div>
-          <div class="nm">${c.name}</div>
-        </div>
+        ${imgSection}
         <div class="inv-info">
           <div class="inv-name">${c.name}</div>
           <div class="inv-meta">
