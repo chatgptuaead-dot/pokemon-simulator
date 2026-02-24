@@ -390,13 +390,13 @@ const HOT_MONS = {
 //  Ultra/Secret rares reuse known holo cards (Mewtwo, Mew, Legendaries)
 //  so every image is a real TCG card photo that matches its name.
 // ════════════════════════════════════════
-function tcgImg(dexNum) {
-  // sv3pt5 = Pokémon 151 set — base cards 1-151 follow Pokédex numbering exactly
-  return `https://images.pokemontcg.io/sv3pt5/${dexNum}.png`;
+function pokeArt(dexNum) {
+  // PokeAPI official artwork — 100% reliable, correct Pokemon for every Pokédex number
+  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${dexNum}.png`;
 }
 
 function offlineCard(name, emoji, rarity, dexNum) {
-  return { name, emoji, rarity, images:{ small: tcgImg(dexNum) } };
+  return { name, emoji, rarity, isOffline: true, images:{ small: pokeArt(dexNum) } };
 }
 
 const OFFLINE_POOL = {
