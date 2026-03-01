@@ -477,13 +477,15 @@ const HOT_MONS = {
 //  Ultra/Secret rares reuse known holo cards (Mewtwo, Mew, Legendaries)
 //  so every image is a real TCG card photo that matches its name.
 // ════════════════════════════════════════
-function pokeArt(dexNum) {
-  // PokeAPI official artwork — 100% reliable, correct Pokemon for every Pokédex number
-  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${dexNum}.png`;
+function tcgImg(dexNum) {
+  // sv3pt5 (Pokémon 151) cards are numbered 001–151 matching Pokédex order.
+  // The CDN uses zero-padded 3-digit filenames — e.g. Pidgey #16 → "016.png"
+  return `https://images.pokemontcg.io/sv3pt5/${String(dexNum).padStart(3,'0')}.png`;
 }
 
 function offlineCard(name, emoji, rarity, dexNum) {
-  return { name, emoji, rarity, isOffline: true, images:{ small: pokeArt(dexNum) } };
+  // No isOffline flag — renders as a full-cover TCG card image
+  return { name, emoji, rarity, images:{ small: tcgImg(dexNum) } };
 }
 
 const OFFLINE_POOL = {
@@ -639,16 +641,50 @@ function estimateValue(card) {
 // ════════════════════════════════════════
 //  API  (with timeout + graceful fallback)
 // ════════════════════════════════════════
+// ── Pool cache (localStorage) ─────────────────────────────────────────────
+const POOL_CACHE_KEY = 'pkpack_pools_v5';
+
+function savePools() {
+  try {
+    const out = {};
+    for (const [k, v] of Object.entries(cardPools)) {
+      if (!v._live) continue; // skip offline-fallback pools
+      out[k] = {};
+      for (const [tier, cards] of Object.entries(v)) {
+        if (tier === '_live') continue;
+        out[k][tier] = cards.map(c => ({
+          id: c.id, name: c.name, hp: c.hp, rarity: c.rarity,
+          attacks: (c.attacks||[]).map(a => ({ name: a.name, damage: a.damage, text: (a.text||'').slice(0,120) })),
+          images: { small: c.images?.small||'' }
+        }));
+      }
+    }
+    localStorage.setItem(POOL_CACHE_KEY, JSON.stringify(out));
+  } catch(e) {}
+}
+
+function loadPools() {
+  try {
+    const d = localStorage.getItem(POOL_CACHE_KEY);
+    if (!d) return;
+    const saved = JSON.parse(d);
+    for (const [k, v] of Object.entries(saved)) {
+      if (!cardPools[k]) cardPools[k] = { ...v, _live: true };
+    }
+  } catch(e) {}
+}
+
 async function fetchPool(setId) {
-  if (cardPools[setId]) return false; // already loaded, not offline
+  if (cardPools[setId]) return false; // already in memory (or loaded from cache)
 
   abortCtrl = new AbortController();
-  const timeout = setTimeout(() => abortCtrl.abort(), 12000);
+  const timeout = setTimeout(() => abortCtrl.abort(), 25000); // 25 s
   showLoad(`Loading ${SET_META.find(s=>s.id===setId)?.name||setId}…`);
 
   try {
+    // select= reduces response from ~500 KB to ~60 KB — much faster
     const r = await fetch(
-      `https://api.pokemontcg.io/v2/cards?q=set.id:${setId}&pageSize=250`,
+      `https://api.pokemontcg.io/v2/cards?q=set.id:${setId}&pageSize=250&select=id,name,hp,attacks,rarity,images`,
       { signal: abortCtrl.signal }
     );
     clearTimeout(timeout);
@@ -661,17 +697,17 @@ async function fetchPool(setId) {
       const t = getTier(c.rarity);
       pools[t].push(c);
     }
-    // If any required tier is empty, ensure fallback exists
+    // Guarantee every tier has at least the offline fallback cards
     for (const t of TIER_ORDER) {
       if (!pools[t].length) pools[t] = [...OFFLINE_POOL[t]||[]];
     }
-    cardPools[setId] = pools;
+    cardPools[setId] = { ...pools, _live: true };
+    savePools(); // persist so next visit is instant
     return false; // not offline
   } catch(e) {
     clearTimeout(timeout);
-    // Use offline fallback
-    cardPools[setId] = { ...OFFLINE_POOL };
-    return true; // used offline
+    cardPools[setId] = { ...OFFLINE_POOL }; // offline fallback
+    return true;
   } finally {
     hideLoad();
     abortCtrl = null;
@@ -1521,6 +1557,7 @@ function restartBattle() {
 //  INIT
 // ════════════════════════════════════════
 load();
+loadPools();  // restore cached card pools from localStorage
 renderShop();
 updateMoney();
 </script>
