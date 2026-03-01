@@ -470,16 +470,38 @@ const SET_META = [
 //  RARITY CONFIG
 // ════════════════════════════════════════
 const RARITY_TO_TIER = {
-  'Common':'common','Uncommon':'uncommon',
-  'Rare':'rare','Rare Holo':'holo','Radiant Rare':'holo','Double Rare':'holo',
+  // Common / Uncommon
+  'Common':'common','Uncommon':'uncommon','Promo':'uncommon','Black Star Promo':'uncommon',
+  // Rare
+  'Rare':'rare','Rare Holo':'holo','Radiant Rare':'holo',
+  // SV era — Double Rare = ex holo, Ultra Rare = full-art ex/supporters
+  'Double Rare':'holo','Ultra Rare':'ultra',
+  // Shiny rares (Paldean Fates, Stellar Crown)
+  'Shiny Rare':'holo','Shiny Ultra Rare':'ultra',
+  // Legacy ultra
   'ACE SPEC Rare':'ultra','Illustration Rare':'ultra','Amazing Rare':'ultra',
   'Rare Ultra':'ultra','Rare Holo EX':'ultra','Rare Holo GX':'ultra',
   'Rare Holo V':'ultra','Rare Holo VMAX':'ultra','Rare Holo VSTAR':'ultra',
-  'Trainer Gallery Rare Holo':'ultra',
+  'Trainer Gallery Rare Holo':'ultra','Classic Collection':'ultra',
+  'Rare Shining':'holo','Rare Prime':'holo',
+  // Secret
   'Special Illustration Rare':'secret','Hyper Rare':'secret',
   'Rare Secret':'secret','Rare Rainbow':'secret',
   'Rare Shiny V':'secret','Rare Shiny GX':'secret','LEGEND':'secret',
 };
+
+// Keyword fallback for rarity strings not in the mapping
+function getTier(rarity) {
+  if (!rarity) return 'common';
+  if (RARITY_TO_TIER[rarity]) return RARITY_TO_TIER[rarity];
+  const r = rarity.toLowerCase();
+  if (r.includes('secret') || r.includes('rainbow') || r.includes('hyper')) return 'secret';
+  if (r.includes('ultra') || r.includes('illustration') || r.includes('full art') || r.includes('gold')) return 'ultra';
+  if (r.includes('holo') || r.includes('shiny') || r.includes('radiant') || r.includes('prime')) return 'holo';
+  if (r.includes('rare')) return 'rare';
+  if (r.includes('uncommon') || r.includes('promo')) return 'uncommon';
+  return 'common';
+}
 const TIER = {
   common:   { label:'Common',     color:'#999',    valueRange:[0.05, 0.35]  },
   uncommon: { label:'Uncommon',   color:'#3ddc5a', valueRange:[0.30, 1.80]  },
@@ -643,7 +665,6 @@ function load() { try{ const d=localStorage.getItem('pokepack_v4'); if(d) S=JSON
 //  UTILS
 // ════════════════════════════════════════
 function fmt(n) { return '$'+Math.abs(n).toFixed(2); }
-function getTier(rarity) { return RARITY_TO_TIER[rarity]||'common'; }
 function rand(a,b) { return a+Math.random()*(b-a); }
 
 function pickWeighted(pool) {
@@ -705,7 +726,7 @@ function estimateValue(card) {
 //  API  (with timeout + graceful fallback)
 // ════════════════════════════════════════
 // ── Pool cache (localStorage) ─────────────────────────────────────────────
-const POOL_CACHE_KEY = 'pkpack_pools_v6';
+const POOL_CACHE_KEY = 'pkpack_pools_v7';
 
 function savePools() {
   try {
