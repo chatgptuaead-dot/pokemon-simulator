@@ -653,13 +653,50 @@ function pickWeighted(pool) {
   return Object.keys(pool)[0];
 }
 
+function extractMarketPrice(card) {
+  // Try tcgplayer prices (both GitHub data repo and pokemontcg.io use this format)
+  const tp = card.tcgplayer?.prices;
+  if (tp) {
+    const order = ['holofoil','reverseHolofoil','normal','1stEditionHolofoil','1stEditionNormal'];
+    for (const v of order) {
+      const p = tp[v]?.market || tp[v]?.mid;
+      if (p > 0) return p;
+    }
+    for (const v of Object.values(tp)) {
+      const p = v?.market || v?.mid;
+      if (p > 0) return p;
+    }
+  }
+  // Try cardmarket prices
+  const cm = card.cardmarket?.prices;
+  if (cm) {
+    const p = cm.trendPrice || cm.averageSellPrice || cm.avg1;
+    if (p > 0) return p;
+  }
+  return null;
+}
+
+function tierFromPrice(price) {
+  if (price <  0.35) return 'common';
+  if (price <  1.80) return 'uncommon';
+  if (price <  6.00) return 'rare';
+  if (price < 25.00) return 'holo';
+  if (price < 70.00) return 'ultra';
+  return 'secret';
+}
+
 function estimateValue(card) {
-  const t=getTier(card.rarity);
-  const [mn,mx]=TIER[t].valueRange;
-  let v=rand(mn,mx);
-  const name=(card.name||'').toLowerCase();
-  for(const[mon,m] of Object.entries(HOT_MONS)){
-    if(name.includes(mon)){ v*=rand(m.mn,m.mx); break; }
+  // Use real market price when available (±20% variance for realism)
+  if (card._marketPrice > 0) {
+    return parseFloat((card._marketPrice * rand(0.8, 1.2)).toFixed(2));
+  }
+  // Fallback: estimate from rarity label
+  const t = card.tier || getTier(card.rarity);
+  const [mn,mx] = TIER[t]?.valueRange || TIER.common.valueRange;
+  let v = rand(mn, mx);
+  const name = (card.name||'').toLowerCase();
+  for (const [mon,m] of Object.entries(HOT_MONS)) {
+    if (name.includes(mon)) { v *= rand(m.mn, m.mx); break; }
   }
   return Math.min(parseFloat(v.toFixed(2)), mx*5);
 }
@@ -668,7 +705,7 @@ function estimateValue(card) {
 //  API  (with timeout + graceful fallback)
 // ════════════════════════════════════════
 // ── Pool cache (localStorage) ─────────────────────────────────────────────
-const POOL_CACHE_KEY = 'pkpack_pools_v5';
+const POOL_CACHE_KEY = 'pkpack_pools_v6';
 
 function savePools() {
   try {
@@ -681,7 +718,8 @@ function savePools() {
         out[k][tier] = cards.map(c => ({
           id: c.id, name: c.name, hp: c.hp, rarity: c.rarity,
           attacks: (c.attacks||[]).map(a => ({ name: a.name, damage: a.damage, text: (a.text||'').slice(0,120) })),
-          images: { small: c.images?.small||'' }
+          images: { small: c.images?.small||'' },
+          _marketPrice: c._marketPrice || null
         }));
       }
     }
@@ -738,7 +776,10 @@ async function fetchPool(setId) {
       const pools = { common:[],uncommon:[],rare:[],holo:[],ultra:[],secret:[] };
       for (const c of cards) {
         if (!c.images?.small) continue;
-        pools[getTier(c.rarity)].push(c);
+        const mp = extractMarketPrice(c);
+        c._marketPrice = mp;
+        const tier = mp ? tierFromPrice(mp) : getTier(c.rarity);
+        pools[tier].push(c);
       }
       for (const t of TIER_ORDER) {
         if (!pools[t].length) pools[t] = [...OFFLINE_POOL[t]||[]];
