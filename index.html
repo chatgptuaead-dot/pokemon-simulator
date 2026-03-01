@@ -1547,33 +1547,48 @@ function botName(level) {
 }
 
 function buildBotTeam(level) {
-  const allowedTiers = level <= 6  ? ['common','uncommon']
-    : level <= 12 ? ['common','uncommon','rare']
-    : level <= 18 ? ['common','uncommon','rare','holo']
-    : level <= 25 ? ['common','uncommon','rare','holo','ultra']
-    :               ['common','uncommon','rare','holo','ultra','secret'];
-  const all = [];
+  // Tier priority: fill all 3 slots from the primary tier first, overflow down
+  const tierPriority = level <= 5  ? ['common','uncommon','rare','holo','ultra','secret']
+    : level <= 12 ? ['uncommon','rare','common','holo','ultra','secret']
+    : level <= 18 ? ['rare','holo','uncommon','ultra','common','secret']
+    : level <= 24 ? ['holo','ultra','rare','secret','uncommon','common']
+    : level <= 29 ? ['ultra','secret','holo','rare','uncommon','common']
+    :               ['secret','ultra','holo','rare','uncommon','common'];
+
+  // Collect live cards by tier
+  const byTier = { common:[], uncommon:[], rare:[], holo:[], ultra:[], secret:[] };
   for (const pools of Object.values(cardPools)) {
     for (const [tierName, tierCards] of Object.entries(pools)) {
-      if (!Array.isArray(tierCards)) continue;
-      if (!allowedTiers.includes(tierName)) continue;
+      if (!Array.isArray(tierCards) || !byTier[tierName]) continue;
       for (const c of tierCards) {
-        if (c.attacks && c.attacks.length > 0) all.push(c);
+        if (c.attacks && c.attacks.length > 0) byTier[tierName].push(c);
       }
     }
   }
-  // Prefer secret/ultra for level 26-30
-  if (level >= 26) {
-    all.sort((a,b) => TIER_ORDER.indexOf(getTier(a.rarity||'Common')) - TIER_ORDER.indexOf(getTier(b.rarity||'Common')));
+
+  // Fill 3 slots in priority order
+  const picked = [];
+  for (const t of tierPriority) {
+    const available = byTier[t].filter(c => !picked.includes(c));
+    const shuffled = available.slice().sort(() => Math.random() - 0.5);
+    picked.push(...shuffled.slice(0, 3 - picked.length));
+    if (picked.length >= 3) break;
   }
-  // Fallback to OFFLINE_POOL if not enough live cards
-  if (all.length < 3) {
-    for (const tierName of allowedTiers) {
-      for (const c of OFFLINE_POOL[tierName] || []) all.push(c);
+
+  // Fallback to OFFLINE_POOL if still short
+  if (picked.length < 3) {
+    for (const t of tierPriority) {
+      for (const c of OFFLINE_POOL[t] || []) {
+        if (picked.length >= 3) break;
+        if (!picked.includes(c)) picked.push(c);
+      }
+      if (picked.length >= 3) break;
     }
   }
-  if (all.length < 3) return null;
-  return all.slice().sort(()=>Math.random()-.5).slice(0,3).map(c => {
+
+  if (picked.length < 3) return null;
+
+  return picked.slice(0, 3).map(c => {
     const bc = mkBattleCard(c);
     bc._maxHp = parseInt(c.hp || 60) + level * 2;
     bc._hp = bc._maxHp;
