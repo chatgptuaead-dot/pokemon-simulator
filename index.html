@@ -1941,6 +1941,7 @@ function renderEndScreen() {
             return `<div class="prize-card" onclick="playerPickPrize(${i})">${imgH}<div class="prize-name">${c.name}</div></div>`;
           }).join('')}
         </div>
+        <button class="battle-restart-btn" style="margin-top:.5rem;color:var(--muted)" onclick="restartBattle()">No thanks, just rematch</button>
       ` : `
         <div class="taken-msg">😢 Opponent took your <strong>${BS.opponentPrize?.name||'card'}</strong>!</div>
         <button class="battle-restart-btn" onclick="restartBattle()">⚔️ Battle Again</button>
