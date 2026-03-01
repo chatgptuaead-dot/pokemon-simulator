@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PokéPack Simulator</title>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Nunito:wght@400;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <style>
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
     :root {
@@ -294,7 +295,7 @@
     .attack-btn:hover { border-color:#6060dd; background:#1a1a40; }
     .atk-name { font-weight:900; display:block; }
     .atk-dmg  { color:var(--gold); font-size:.78rem; margin-left:.35rem; }
-    .atk-eff  { font-size:.62rem; color:#666; display:block; margin-top:.15rem; max-width:180px; white-space:normal; }
+    .atk-eff  { font-size:.68rem; color:#8888bb; display:block; margin-top:.15rem; max-width:180px; white-space:normal; }
     .retreat-btn { font-family:'Nunito',sans-serif; font-weight:800; font-size:.82rem; background:transparent; border:2px solid #334; color:#666; border-radius:50px; padding:.45rem 1.2rem; cursor:pointer; transition:all .2s; }
     .retreat-btn:not(:disabled):hover { border-color:#556; color:#aaa; }
     .retreat-btn:disabled { opacity:.35; cursor:not-allowed; }
@@ -314,6 +315,31 @@
     .taken-msg { font-size:.9rem; font-weight:800; color:#ff5555; margin-bottom:1.2rem; }
     .battle-restart-btn { font-family:'Nunito',sans-serif; font-weight:900; font-size:.95rem; background:var(--card2); border:2px solid var(--border); color:var(--text); border-radius:50px; padding:.65rem 2rem; cursor:pointer; transition:all .2s; }
     .battle-restart-btn:hover { border-color:rgba(255,255,255,.3); }
+
+    /* ── Battle Mode Tabs ── */
+    .battle-mode-tabs { display:flex; gap:.5rem; justify-content:center; margin-bottom:1rem; }
+    .battle-mode-tab { font-family:'Nunito',sans-serif; font-weight:800; font-size:.85rem; background:transparent; border:2px solid var(--border); color:var(--muted); border-radius:50px; padding:.45rem 1.2rem; cursor:pointer; transition:all .2s; }
+    .battle-mode-tab:hover { border-color:rgba(255,255,255,.3); color:var(--text); }
+    .battle-mode-tab.active { background:#2a2a60; border-color:#5050c0; color:#9090ff; }
+
+    /* ── Bot Level Row ── */
+    .bot-level-row { display:flex; align-items:center; gap:.8rem; justify-content:center; margin-bottom:1rem; flex-wrap:wrap; }
+    .bot-level-lbl { font-size:.82rem; font-weight:800; color:#9090ff; min-width:150px; }
+    input[type=range].bot-slider { -webkit-appearance:none; width:180px; height:6px; border-radius:3px; background:linear-gradient(to right,#5050c0,#9090ff); outline:none; cursor:pointer; }
+    input[type=range].bot-slider::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#9090ff; border:2px solid #fff; cursor:pointer; }
+
+    /* ── Friend Room UI ── */
+    .friend-room-wrap { text-align:center; padding:1.5rem 1rem; }
+    .friend-room-btns { display:flex; gap:.8rem; justify-content:center; flex-wrap:wrap; margin-bottom:.8rem; }
+    .room-btn { font-family:'Nunito',sans-serif; font-weight:900; font-size:.9rem; border:none; border-radius:50px; padding:.65rem 1.8rem; cursor:pointer; transition:transform .2s; }
+    .room-btn:hover { transform:scale(1.06); }
+    .room-btn-create { background:linear-gradient(135deg,#1a4080,#2a6fcc); color:#fff; }
+    .join-code-display { font-family:'Courier New',monospace; font-size:2rem; font-weight:900; letter-spacing:.3em; color:var(--gold); background:var(--card2); border:2px solid var(--gold); border-radius:12px; padding:.6rem 1.4rem; display:inline-block; margin:.8rem 0; user-select:all; }
+    .join-input { font-family:'Courier New',monospace; font-size:1.1rem; font-weight:900; letter-spacing:.15em; text-transform:uppercase; width:130px; background:var(--card2); border:2px solid var(--border); color:var(--text); border-radius:8px; padding:.5rem .7rem; outline:none; text-align:center; }
+    .join-input:focus { border-color:#5050c0; }
+    .mp-status { font-size:.88rem; font-weight:700; color:#9090ff; margin-top:.5rem; }
+    .mp-status.ok  { color:#3ddc5a; }
+    .mp-status.err { color:#ff5555; }
   </style>
 </head>
 <body>
@@ -1171,6 +1197,16 @@ function renderStats() {
 // ════════════════════════════════════════
 let BS = null;        // active battle state
 let battleTeam = [];  // uids of selected cards for upcoming battle
+let botLevel   = 5;
+let battleMode = 'bot';
+// P2P state
+let peer         = null;
+let peerConn     = null;
+let mpRole       = null;   // 'host' | 'guest' | null
+let mpTheirTeam  = null;   // opponent team received via P2P
+let mpCode       = '';
+let _mpWaitTimer = null;
+let _mpMyTeamSent = false;
 
 // ── Helpers ──────────────────────────────
 function parseDmg(s) {
@@ -1196,11 +1232,24 @@ function getEligibleCards() {
   return S.inventory.filter(c => c.attacks && c.attacks.length > 0);
 }
 
+function simplifyEffect(text) {
+  if (!text) return '';
+  let t = text
+    .replace(/\(before applying Weakness and Resistance\)/gi, '')
+    .replace(/\(after applying Weakness and Resistance\)/gi, '')
+    .replace(/your opponent's Active Pok[eé]mon/gi, 'opponent')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  const firstSent = t.split('. ')[0];
+  if (firstSent.length > 52) return firstSent.substring(0, 52) + '…';
+  return firstSent;
+}
+
 // ── Team building ─────────────────────────
 function renderBattleView() {
   document.getElementById('bpDisplay').textContent = S.battlePoints || 0;
   const rp = document.getElementById('retreatPill');
-  if (BS && (BS.phase === 'player-turn' || BS.phase === 'opponent-turn' || BS.phase === 'swap-fainted' || BS.phase === 'retreat')) {
+  if (BS && (BS.phase === 'player-turn' || BS.phase === 'opponent-turn' || BS.phase === 'mp-opponent-turn' || BS.phase === 'swap-fainted' || BS.phase === 'retreat')) {
     rp.style.display = '';
     document.getElementById('retreatsLeft').textContent = BS.retreatsLeft;
   } else {
@@ -1211,6 +1260,27 @@ function renderBattleView() {
 }
 
 function renderBattleTeamSelect() {
+  const content = document.getElementById('battleContent');
+  const modeTabsHTML = `
+    <div class="battle-mode-tabs">
+      <button class="battle-mode-tab${battleMode==='bot'?' active':''}" onclick="setBattleMode('bot')">🤖 vs Bot</button>
+      <button class="battle-mode-tab${battleMode==='friend'?' active':''}" onclick="setBattleMode('friend')">👥 vs Friend</button>
+    </div>`;
+
+  if (battleMode === 'friend') {
+    content.innerHTML = modeTabsHTML + renderFriendPanel();
+    return;
+  }
+
+  // Bot mode
+  const bName = botName(botLevel);
+  const botControlsHTML = `
+    <div class="bot-level-row">
+      <span style="font-size:.8rem;font-weight:700;color:var(--muted)">Bot Level:</span>
+      <input type="range" class="bot-slider" min="1" max="30" value="${botLevel}" oninput="setBotLevel(this.value)">
+      <span class="bot-level-lbl">${bName} (Lv.${botLevel})</span>
+    </div>`;
+
   const eligible = getEligibleCards();
   const sel = battleTeam.map(uid => eligible.find(c => c.uid === uid)).filter(Boolean);
 
@@ -1230,9 +1300,8 @@ function renderBattleTeamSelect() {
     </div>`;
   }
 
-  const content = document.getElementById('battleContent');
   if (eligible.length === 0) {
-    content.innerHTML = `
+    content.innerHTML = modeTabsHTML + botControlsHTML + `
       <div class="battle-selected-slots">${[0,1,2].map(()=>'<div class="bslot">?</div>').join('')}</div>
       <div class="empty"><div class="icon">⚔️</div>
         <p>No battle-ready cards yet!</p>
@@ -1241,13 +1310,133 @@ function renderBattleTeamSelect() {
     return;
   }
 
-  content.innerHTML = `
+  content.innerHTML = modeTabsHTML + botControlsHTML + `
     <div class="battle-selected-slots">
       ${[0,1,2].map(i => slotHTML(sel[i])).join('')}
     </div>
     <div style="text-align:center;margin-bottom:1.2rem">
       <button class="start-battle-btn" ${sel.length===3?'':'disabled'} onclick="startBattle()">
         ⚔️ ${sel.length===3 ? 'Start Battle!' : `Select ${3-sel.length} more`}
+      </button>
+    </div>
+    <div class="eligible-hint">${eligible.length} battle-eligible card${eligible.length!==1?'s':''} — select 3</div>
+    <div class="battle-card-sel">
+      <div class="inv-grid">
+        ${eligible.map(c => {
+          const isSel = battleTeam.includes(c.uid);
+          const tc = TIER[c.tier];
+          const imgSec = c.isOffline
+            ? `<div class="inv-artwork-wrap" style="background:linear-gradient(160deg,${tc.color}44 0%,#0d0d20 80%)">
+                 <img class="inv-artwork-img" src="${c.images?.small||''}" alt="${c.name}" loading="lazy" onerror="this.style.display='none'">
+               </div>`
+            : `<img class="inv-img" src="${c.images?.small||''}" alt="${c.name}" loading="lazy"
+                    onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+               <div class="inv-img-placeholder" style="display:none;background:${tc.color}18">
+                 <div class="em">${c.emoji||'🃏'}</div><div class="nm">${c.name}</div>
+               </div>`;
+          const atksPreview = (c.attacks||[]).slice(0,2).map(a=>`${a.name}${parseDmg(a.damage)?` ${parseDmg(a.damage)}`:''}`).join(' · ');
+          return `
+            <div class="inv-card tier-${c.tier}${isSel?' selected':''}" onclick="toggleBattleCard(${c.uid})" style="cursor:pointer">
+              ${isSel ? '<div style="position:absolute;top:4px;right:4px;background:var(--gold);color:#111;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:900;z-index:5">✓</div>' : ''}
+              ${imgSec}
+              <div class="inv-info">
+                <div class="inv-name">${c.name}</div>
+                <div class="inv-meta">
+                  <span class="inv-rar" style="color:${tc.color}">${c.hp||'?'} HP</span>
+                  <span style="font-size:.5rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70px">${atksPreview}</span>
+                </div>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+function renderFriendPanel() {
+  const connected = peerConn && peerConn.open;
+  if (connected) return renderFriendTeamSelect();
+
+  if (mpRole === 'host' && peer) {
+    return `
+      <div class="friend-room-wrap">
+        <div class="mp-status">Share this code with your friend:</div>
+        <div class="join-code-display">${mpCode}</div>
+        <div class="mp-status" style="display:flex;align-items:center;justify-content:center;gap:.5rem">
+          <div class="spinner" style="width:16px;height:16px;border-width:2px"></div>Waiting for friend…
+        </div>
+        <button class="retreat-btn" style="margin-top:1rem" onclick="resetMp()">Cancel</button>
+      </div>`;
+  }
+
+  if (mpRole === 'guest') {
+    return `
+      <div class="friend-room-wrap">
+        <div class="mp-status" style="display:flex;align-items:center;justify-content:center;gap:.5rem">
+          <div class="spinner" style="width:16px;height:16px;border-width:2px"></div>Connecting to ${mpCode}…
+        </div>
+        <button class="retreat-btn" style="margin-top:1rem" onclick="resetMp()">Cancel</button>
+      </div>`;
+  }
+
+  return `
+    <div class="friend-room-wrap">
+      <p style="color:var(--muted);font-size:.82rem;margin-bottom:1.2rem">Battle a friend in real-time via a shared 6-character code</p>
+      <div class="friend-room-btns">
+        <button class="room-btn room-btn-create" onclick="createRoom()">🔗 Create Room</button>
+      </div>
+      <div style="display:flex;gap:.5rem;align-items:center;justify-content:center;margin-top:.8rem">
+        <input class="join-input" id="joinCodeInput" type="text" maxlength="6" placeholder="AABBCC">
+        <button class="room-btn" style="background:#2a2a50;border:2px solid #5050c0;color:#9090ff;padding:.5rem 1rem"
+                onclick="joinRoom(document.getElementById('joinCodeInput').value)">Join</button>
+      </div>
+    </div>`;
+}
+
+function renderFriendTeamSelect() {
+  const eligible = getEligibleCards();
+  const sel = battleTeam.map(uid => eligible.find(c => c.uid === uid)).filter(Boolean);
+
+  if (_mpMyTeamSent) {
+    return `
+      <div class="friend-room-wrap">
+        <div class="mp-status ok">Team sent!</div>
+        <div class="mp-status" style="display:flex;align-items:center;justify-content:center;gap:.5rem;margin-top:.5rem">
+          <div class="spinner" style="width:16px;height:16px;border-width:2px"></div>Waiting for opponent to finalize their team…
+        </div>
+      </div>`;
+  }
+
+  function slotHTML(c) {
+    if (!c) return '<div class="bslot">?</div>';
+    const i = sel.indexOf(c);
+    const thumb = c.isOffline
+      ? `<div class="inv-artwork-wrap" style="width:100%;height:100%;background:linear-gradient(160deg,${TIER[c.tier]?.color||'#444'}44,#0d0d20)">
+           <img class="inv-artwork-img" src="${c.images?.small||''}" alt="${c.name}" onerror="this.style.display='none'">
+         </div>`
+      : `<img src="${c.images?.small||''}" alt="${c.name}"
+              style="width:100%;height:100%;object-fit:cover"
+              onerror="this.style.display='none'">`;
+    return `<div class="bslot filled">
+      ${thumb}
+      <button class="bslot-rmv" onclick="removeBattleSlot(${i})">✕</button>
+    </div>`;
+  }
+
+  if (eligible.length === 0) {
+    return `
+      <div class="mp-status ok" style="margin-bottom:.8rem">Connected!</div>
+      <div class="battle-selected-slots">${[0,1,2].map(()=>'<div class="bslot">?</div>').join('')}</div>
+      <div class="empty"><div class="icon">⚔️</div><p>No battle-ready cards yet!</p></div>`;
+  }
+
+  return `
+    <div class="mp-status ok" style="margin-bottom:.5rem">Connected with friend! Select your team.</div>
+    <div class="battle-selected-slots">
+      ${[0,1,2].map(i => slotHTML(sel[i])).join('')}
+    </div>
+    <div style="text-align:center;margin-bottom:1.2rem">
+      <button class="start-battle-btn" ${sel.length===3?'':'disabled'} onclick="startBattle()">
+        ${sel.length===3 ? '⚔️ Send Team & Battle!' : `Select ${3-sel.length} more`}
       </button>
     </div>
     <div class="eligible-hint">${eligible.length} battle-eligible card${eligible.length!==1?'s':''} — select 3</div>
@@ -1307,20 +1496,100 @@ function buildOpponentTeam() {
   return all.slice().sort(()=>Math.random()-.5).slice(0,3);
 }
 
+function botName(level) {
+  if (level <= 5)  return 'Wild Trainer';
+  if (level <= 12) return 'Youngster';
+  if (level <= 18) return 'Rival';
+  if (level <= 24) return 'Gym Leader';
+  if (level <= 29) return 'Elite Four';
+  return 'Champion';
+}
+
+function buildBotTeam(level) {
+  const allowedTiers = level <= 6  ? ['common','uncommon']
+    : level <= 12 ? ['common','uncommon','rare']
+    : level <= 18 ? ['common','uncommon','rare','holo']
+    : level <= 25 ? ['common','uncommon','rare','holo','ultra']
+    :               ['common','uncommon','rare','holo','ultra','secret'];
+  const all = [];
+  for (const pools of Object.values(cardPools)) {
+    for (const [tierName, tierCards] of Object.entries(pools)) {
+      if (!Array.isArray(tierCards)) continue;
+      if (!allowedTiers.includes(tierName)) continue;
+      for (const c of tierCards) {
+        if (c.attacks && c.attacks.length > 0) all.push(c);
+      }
+    }
+  }
+  // Prefer secret/ultra for level 26-30
+  if (level >= 26) {
+    all.sort((a,b) => TIER_ORDER.indexOf(getTier(a.rarity||'Common')) - TIER_ORDER.indexOf(getTier(b.rarity||'Common')));
+  }
+  // Fallback to OFFLINE_POOL if not enough live cards
+  if (all.length < 3) {
+    for (const tierName of allowedTiers) {
+      for (const c of OFFLINE_POOL[tierName] || []) all.push(c);
+    }
+  }
+  if (all.length < 3) return null;
+  return all.slice().sort(()=>Math.random()-.5).slice(0,3).map(c => {
+    const bc = mkBattleCard(c);
+    bc._maxHp = parseInt(c.hp || 60) + level * 2;
+    bc._hp = bc._maxHp;
+    return bc;
+  });
+}
+
+function botPickAttack(atker, defdr, level) {
+  const atks = atker.attacks;
+  if (!atks || !atks.length) return null;
+  if (level <= 6) return atks[Math.floor(Math.random() * atks.length)];
+  let best = atks[0], bestDmg = -1;
+  for (const a of atks) { const d = parseDmg(a.damage); if (d > bestDmg) { bestDmg = d; best = a; } }
+  return best;
+}
+
+function botShouldRetreat(atker, level) {
+  if (level < 16) return false;
+  const hpPct = atker._hp / atker._maxHp;
+  if (level <= 25 && hpPct < 0.30) return true;
+  if (level >= 26 && hpPct < 0.25) return true;
+  return false;
+}
+
 // ── Start ─────────────────────────────────
 function startBattle() {
+  if (battleMode === 'friend') {
+    if (!peerConn || !peerConn.open) { toast('Not connected to a friend yet!', 'err'); return; }
+    const eligible = getEligibleCards();
+    const playerCards = battleTeam.map(uid=>eligible.find(c=>c.uid===uid)).filter(Boolean);
+    if (playerCards.length !== 3) { toast('Select 3 cards to battle!'); return; }
+    _mpMyTeamSent = true;
+    const teamData = playerCards.map(c => ({
+      name: c.name, hp: c.hp, attacks: (c.attacks||[]),
+      images: c.images, rarity: c.rarity, tier: c.tier, emoji: c.emoji||'🃏'
+    }));
+    sendPeer({ type: 'team', cards: teamData });
+    if (mpTheirTeam) { startMpBattle(); return; }
+    toast('Team sent! Waiting for opponent…', 'ok');
+    renderBattleTeamSelect();
+    return;
+  }
+
+  // Bot mode
   const eligible = getEligibleCards();
   const playerCards = battleTeam.map(uid=>eligible.find(c=>c.uid===uid)).filter(Boolean);
   if (playerCards.length !== 3) { toast('Select 3 cards to battle!'); return; }
-  const oppCards = buildOpponentTeam();
+  const oppCards = buildBotTeam(botLevel);
   if (!oppCards) { toast('Open packs first so the opponent has attack cards!'); return; }
   BS = {
-    player:      playerCards.map(mkBattleCard),
-    opponent:    oppCards.map(mkBattleCard),
-    playerActive:   0,
-    opponentActive: 0,
-    retreatsLeft: 2,
-    log: ['⚔️ Battle Start! Choose your attack!'],
+    player:           playerCards.map(mkBattleCard),
+    opponent:         oppCards,
+    playerActive:     0,
+    opponentActive:   0,
+    retreatsLeft:     2,
+    _botRetreatsLeft: Math.floor(botLevel / 10),
+    log: [`⚔️ Battle vs ${botName(botLevel)} (Lv.${botLevel})! Choose your attack!`],
     phase: 'player-turn',
     winner: null,
     opponentPrize: null,
@@ -1336,8 +1605,9 @@ function renderBattleField() {
 
   const pa = BS.player[BS.playerActive];
   const oa = BS.opponent[BS.opponentActive];
-  const isSwapping  = BS.phase === 'swap-fainted';
+  const isSwapping   = BS.phase === 'swap-fainted';
   const isRetreating = BS.phase === 'retreat';
+  const isWaitingMp  = BS.phase === 'mp-opponent-turn';
   const canAct = BS.phase === 'player-turn';
 
   // bench: alive cards that aren't active
@@ -1375,14 +1645,17 @@ function renderBattleField() {
         ${pBench.length===0 ? '<div style="color:#ff4444;font-size:.85rem">No Pokémon remaining…</div>' : ''}
       ` : isRetreating ? `
         <div class="swap-prompt">↩ Pick a bench Pokémon to switch in:</div>
+      ` : isWaitingMp ? `
+        <div class="swap-prompt" style="color:#9090ff">⏳ Waiting for opponent's move…</div>
       ` : `
         <div class="battle-actions-title">⚡ ${pa.name}'s Attacks</div>
         <div class="attack-btns">
           ${pa.attacks.map((a,i)=>{
             const dmg = parseDmg(a.damage);
+            const eff = simplifyEffect(a.text);
             return `<button class="attack-btn" onclick="playerAttack(${i})">
               <span class="atk-name">${a.name}${dmg>0?`<span class="atk-dmg">${dmg} dmg</span>`:''}</span>
-              ${a.text ? `<span class="atk-eff">${a.text.substring(0,70)}${a.text.length>70?'…':''}</span>` : ''}
+              ${eff ? `<span class="atk-eff">${eff}</span>` : ''}
             </button>`;
           }).join('')}
         </div>
@@ -1455,7 +1728,13 @@ function playerAttack(atkIdx) {
     BS.opponentActive = nxt;
     BS.log.push(`🔄 Opponent sends out ${BS.opponent[BS.opponentActive].name}!`);
   }
-  opponentTurn();
+  if (mpRole) {
+    sendPeer({ type: 'attack', atkIdx });
+    BS.phase = 'mp-opponent-turn';
+    renderBattleView();
+  } else {
+    opponentTurn();
+  }
 }
 
 function initiateRetreat() {
@@ -1472,10 +1751,16 @@ function sendReplacement(idx) {
   if (wasRetreat) {
     BS.retreatsLeft--;
     BS.log.push(`↩ You retreated! ${BS.player[idx].name} enters the field!`);
+    if (mpRole) {
+      sendPeer({ type: 'retreat', newActive: idx });
+      BS.phase = 'mp-opponent-turn';
+    } else {
+      BS.phase = 'player-turn';
+    }
   } else {
     BS.log.push(`✨ ${BS.player[idx].name} enters the field!`);
+    BS.phase = 'player-turn';
   }
-  BS.phase = 'player-turn';
   renderBattleView();
 }
 
@@ -1486,21 +1771,41 @@ function opponentTurn() {
     if (!BS) return;
     const atker = BS.opponent[BS.opponentActive];
     const defdr = BS.player[BS.playerActive];
-    // AI picks highest-damage attack
-    let bestAtk = atker.attacks[0], bestDmg = -1;
-    for (const a of atker.attacks) { const d=parseDmg(a.damage); if(d>bestDmg){bestDmg=d;bestAtk=a;} }
+
+    let bestAtk;
+    if (battleMode === 'bot') {
+      bestAtk = botPickAttack(atker, defdr, botLevel) || atker.attacks[0];
+    } else {
+      bestAtk = atker.attacks[0];
+      let bestDmg = -1;
+      for (const a of atker.attacks) { const d=parseDmg(a.damage); if(d>bestDmg){bestDmg=d;bestAtk=a;} }
+    }
+
     const dmg = parseDmg(bestAtk.damage);
     defdr._hp = Math.max(0, defdr._hp - dmg);
     BS.log.push(`🔥 Opponent's ${atker.name} used ${bestAtk.name}!${dmg>0?` (${dmg} dmg)`:' (no damage)'}`);
+
     if (defdr._hp <= 0) {
       defdr._fainted = true;
       BS.log.push(`💀 Your ${defdr.name} fainted!`);
       const nxt = nextLive(BS.player, BS.playerActive);
       if (nxt === null) { endBattle('opponent'); return; }
       BS.phase = 'swap-fainted';
-    } else {
-      BS.phase = 'player-turn';
+      renderBattleView();
+      return;
     }
+
+    // Bot retreat logic (after attacking)
+    if (battleMode === 'bot' && BS._botRetreatsLeft > 0 && botShouldRetreat(atker, botLevel)) {
+      const nxt = nextLive(BS.opponent, BS.opponentActive);
+      if (nxt !== null) {
+        BS._botRetreatsLeft--;
+        BS.opponentActive = nxt;
+        BS.log.push(`↩ Opponent retreated! ${BS.opponent[BS.opponentActive].name} enters the field!`);
+      }
+    }
+
+    BS.phase = 'player-turn';
     renderBattleView();
   }, 900);
 }
@@ -1571,6 +1876,139 @@ function playerPickPrize(idx) {
 function restartBattle() {
   BS = null;
   battleTeam = [];
+  if (mpRole) resetMp();
+  else renderBattleView();
+}
+
+// ════════════════════════════════════════
+//  P2P MULTIPLAYER
+// ════════════════════════════════════════
+function sendPeer(msg) {
+  if (peerConn && peerConn.open) peerConn.send(msg);
+}
+
+function setBattleMode(mode) {
+  battleMode = mode;
+  renderBattleTeamSelect();
+}
+
+function setBotLevel(val) {
+  botLevel = parseInt(val);
+  renderBattleTeamSelect();
+}
+
+function createRoom() {
+  if (typeof Peer === 'undefined') { toast('PeerJS not loaded — check your connection', 'err'); return; }
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  mpCode = Array.from({length:6}, ()=>chars[Math.floor(Math.random()*chars.length)]).join('');
+  try { peer = new Peer('pkpk-' + mpCode); } catch(e) { toast("Couldn't create room", 'err'); return; }
+  mpRole = 'host';
+  renderBattleTeamSelect();
+  peer.on('open', () => {
+    renderBattleTeamSelect();
+    _mpWaitTimer = setTimeout(() => {
+      if (!peerConn) { toast('No one joined — room expired.', 'err'); resetMp(); }
+    }, 30000);
+  });
+  peer.on('connection', conn => {
+    clearTimeout(_mpWaitTimer);
+    peerConn = conn;
+    setupConn();
+    renderBattleTeamSelect();
+  });
+  peer.on('error', () => { toast("Couldn't create room", 'err'); resetMp(); });
+}
+
+function joinRoom(code) {
+  if (typeof Peer === 'undefined') { toast('PeerJS not loaded — check your connection', 'err'); return; }
+  code = (code||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
+  if (code.length !== 6) { toast('Enter a valid 6-character code', 'err'); return; }
+  if (peer) { try { peer.destroy(); } catch(e) {} }
+  mpCode = code;
+  mpRole = 'guest';
+  try { peer = new Peer(); } catch(e) { toast("Couldn't connect — check the code and try again", 'err'); return; }
+  renderBattleTeamSelect();
+  _mpWaitTimer = setTimeout(() => {
+    if (!peerConn || !peerConn.open) { toast("Couldn't connect — check the code and try again", 'err'); resetMp(); }
+  }, 30000);
+  peer.on('open', () => {
+    peerConn = peer.connect('pkpk-' + code);
+    renderBattleTeamSelect();
+    peerConn.on('open', () => { clearTimeout(_mpWaitTimer); setupConn(); renderBattleTeamSelect(); });
+    peerConn.on('error', () => { toast("Couldn't connect — check the code and try again", 'err'); resetMp(); });
+  });
+  peer.on('error', () => { toast("Couldn't connect — check the code and try again", 'err'); resetMp(); });
+}
+
+function setupConn() {
+  peerConn.on('data', handlePeerMsg);
+  peerConn.on('close', () => { toast('Connection lost', 'err'); resetMp(); });
+}
+
+function handlePeerMsg(msg) {
+  if (!msg || !msg.type) return;
+  if (msg.type === 'team') {
+    mpTheirTeam = msg.cards;
+    if (_mpMyTeamSent) startMpBattle();
+    else { toast('Opponent is ready! Select your team and start battle.', 'ok'); renderBattleTeamSelect(); }
+  } else if (msg.type === 'attack') {
+    if (!BS) return;
+    const atker = BS.opponent[BS.opponentActive];
+    const defdr = BS.player[BS.playerActive];
+    const atk = atker.attacks[msg.atkIdx] || atker.attacks[0];
+    const dmg = parseDmg(atk.damage);
+    defdr._hp = Math.max(0, defdr._hp - dmg);
+    BS.log.push(`🔥 Opponent's ${atker.name} used ${atk.name}!${dmg>0?` (${dmg} dmg)`:' (no damage)'}`);
+    if (defdr._hp <= 0) {
+      defdr._fainted = true;
+      BS.log.push(`💀 Your ${defdr.name} fainted!`);
+      const nxt = nextLive(BS.player, BS.playerActive);
+      if (nxt === null) { endBattle('opponent'); return; }
+      BS.phase = 'swap-fainted';
+    } else {
+      BS.phase = 'player-turn';
+    }
+    renderBattleView();
+  } else if (msg.type === 'retreat') {
+    if (!BS) return;
+    BS.opponentActive = msg.newActive;
+    BS.log.push(`↩ Opponent retreated! ${BS.opponent[BS.opponentActive].name} enters the field!`);
+    BS.phase = 'player-turn';
+    renderBattleView();
+  } else if (msg.type === 'resign') {
+    if (!BS) return;
+    endBattle('player');
+  }
+}
+
+function resetMp() {
+  clearTimeout(_mpWaitTimer);
+  if (peer) { try { peer.destroy(); } catch(e) {} }
+  peer = null; peerConn = null; mpRole = null; mpTheirTeam = null;
+  _mpMyTeamSent = false; mpCode = '';
+  if (!BS && battleMode === 'friend') renderBattleTeamSelect();
+}
+
+function startMpBattle() {
+  const eligible = getEligibleCards();
+  const playerCards = battleTeam.map(uid=>eligible.find(c=>c.uid===uid)).filter(Boolean);
+  if (playerCards.length !== 3 || !mpTheirTeam) return;
+  const oppCards = mpTheirTeam.map(c => mkBattleCard(c));
+  BS = {
+    player:           playerCards.map(mkBattleCard),
+    opponent:         oppCards,
+    playerActive:     0,
+    opponentActive:   0,
+    retreatsLeft:     2,
+    _botRetreatsLeft: 0,
+    log: [`⚔️ Battle vs Friend! ${mpRole==='host'?'You go first!':'Opponent goes first!'}`],
+    phase:            mpRole === 'host' ? 'player-turn' : 'mp-opponent-turn',
+    winner:           null,
+    opponentPrize:    null,
+  };
+  battleTeam = [];
+  _mpMyTeamSent = false;
+  mpTheirTeam = null;
   renderBattleView();
 }
 
