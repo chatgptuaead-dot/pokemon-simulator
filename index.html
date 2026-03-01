@@ -475,7 +475,7 @@ const RARITY_TO_TIER = {
   // Rare
   'Rare':'rare','Rare Holo':'holo','Radiant Rare':'holo',
   // SV era — Double Rare = ex holo, Ultra Rare = full-art ex/supporters
-  'Double Rare':'holo','Ultra Rare':'ultra',
+  'Double Rare':'ultra','Ultra Rare':'ultra',
   // Shiny rares (Paldean Fates, Stellar Crown)
   'Shiny Rare':'holo','Shiny Ultra Rare':'ultra',
   // Legacy ultra
@@ -726,7 +726,7 @@ function estimateValue(card) {
 //  API  (with timeout + graceful fallback)
 // ════════════════════════════════════════
 // ── Pool cache (localStorage) ─────────────────────────────────────────────
-const POOL_CACHE_KEY = 'pkpack_pools_v7';
+const POOL_CACHE_KEY = 'pkpack_pools_v8';
 
 function savePools() {
   try {
@@ -799,7 +799,15 @@ async function fetchPool(setId) {
         if (!c.images?.small) continue;
         const mp = extractMarketPrice(c);
         c._marketPrice = mp;
-        const tier = mp ? tierFromPrice(mp) : getTier(c.rarity);
+        let tier = mp ? tierFromPrice(mp) : getTier(c.rarity);
+        // Enforce minimum tier based on card subtypes so ex/V/VMAX/VSTAR cards
+        // always look premium even when cheaply priced
+        const subs = c.subtypes || [];
+        if (subs.some(s => s==='VSTAR' || s==='VMAX' || s==='TAG TEAM')) {
+          if (TIER_ORDER.indexOf(tier) > TIER_ORDER.indexOf('ultra')) tier = 'ultra';
+        } else if (subs.some(s => s==='V' || s==='GX' || s==='EX' || s==='ex' || s==='Radiant')) {
+          if (TIER_ORDER.indexOf(tier) > TIER_ORDER.indexOf('holo')) tier = 'holo';
+        }
         pools[tier].push(c);
       }
       for (const t of TIER_ORDER) {
