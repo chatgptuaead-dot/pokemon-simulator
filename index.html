@@ -1813,7 +1813,7 @@ function playerAttack(atkIdx) {
     BS.opponentActive = nxt;
     BS.log.push(`🔄 Opponent sends out ${BS.opponent[BS.opponentActive].name}!`);
   }
-  if (mpRole) {
+  if (mpRole && battleMode === 'friend') {
     sendPeer({ type: 'attack', atkIdx });
     BS.phase = 'mp-opponent-turn';
     renderBattleView();
@@ -1836,7 +1836,7 @@ function sendReplacement(idx) {
   if (wasRetreat) {
     BS.retreatsLeft--;
     BS.log.push(`↩ You retreated! ${BS.player[idx].name} enters the field!`);
-    if (mpRole) {
+    if (mpRole && battleMode === 'friend') {
       sendPeer({ type: 'retreat', newActive: idx });
       BS.phase = 'mp-opponent-turn';
     } else {
@@ -1975,6 +1975,12 @@ function sendPeer(msg) {
 
 function setBattleMode(mode) {
   battleMode = mode;
+  if (mode === 'bot' && (mpRole || peer)) {
+    clearTimeout(_mpWaitTimer);
+    if (peer) { try { peer.destroy(); } catch(e) {} }
+    peer = null; peerConn = null; mpRole = null;
+    mpTheirTeam = null; _mpMyTeamSent = false; mpCode = '';
+  }
   renderBattleTeamSelect();
 }
 
