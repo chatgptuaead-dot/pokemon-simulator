@@ -477,15 +477,15 @@ const HOT_MONS = {
 //  Ultra/Secret rares reuse known holo cards (Mewtwo, Mew, Legendaries)
 //  so every image is a real TCG card photo that matches its name.
 // ════════════════════════════════════════
-function tcgImg(dexNum) {
-  // sv3pt5 (Pokémon 151) cards are numbered 001–151 matching Pokédex order.
-  // The CDN uses zero-padded 3-digit filenames — e.g. Pidgey #16 → "016.png"
-  return `https://images.pokemontcg.io/sv3pt5/${String(dexNum).padStart(3,'0')}.png`;
+function pokeArt(dexNum) {
+  // Official Pokemon artwork — reliable for every Pokédex number, no CDN guesswork
+  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${dexNum}.png`;
 }
 
 function offlineCard(name, emoji, rarity, dexNum) {
-  // No isOffline flag — renders as a full-cover TCG card image
-  return { name, emoji, rarity, images:{ small: tcgImg(dexNum) } };
+  // isOffline:true → artwork-frame renderer (gradient bg + name label)
+  // avoids orientation/sizing issues inside 3D-transformed flip divs
+  return { name, emoji, rarity, isOffline: true, images:{ small: pokeArt(dexNum) } };
 }
 
 const OFFLINE_POOL = {
@@ -682,9 +682,8 @@ async function fetchPool(setId) {
   showLoad(`Loading ${SET_META.find(s=>s.id===setId)?.name||setId}…`);
 
   try {
-    // select= reduces response from ~500 KB to ~60 KB — much faster
     const r = await fetch(
-      `https://api.pokemontcg.io/v2/cards?q=set.id:${setId}&pageSize=250&select=id,name,hp,attacks,rarity,images`,
+      `https://api.pokemontcg.io/v2/cards?q=set.id:${setId}&pageSize=250`,
       { signal: abortCtrl.signal }
     );
     clearTimeout(timeout);
