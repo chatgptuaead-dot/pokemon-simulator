@@ -87,20 +87,21 @@
     .flip-grid { display:flex; flex-wrap:wrap; gap:.8rem; justify-content:center; max-width:820px; width:100%; }
 
     /* Card flip */
-    .flip-slot { width:100px; height:140px; perspective:700px; cursor:pointer; flex-shrink:0; }
-    .flip-inner { width:100%; height:100%; position:relative; transform-style:preserve-3d; transition:transform .6s cubic-bezier(.4,0,.2,1); }
-    .flip-slot.flipped .flip-inner { transform:rotateY(180deg); }
-    .flip-face { position:absolute; inset:0; border-radius:10px; backface-visibility:hidden; -webkit-backface-visibility:hidden; }
+    .flip-slot { width:100px; height:140px; cursor:pointer; flex-shrink:0; }
+    .flip-inner { width:100%; height:100%; position:relative; perspective:800px; }
+    .flip-face { position:absolute; inset:0; border-radius:10px; backface-visibility:hidden; -webkit-backface-visibility:hidden; transition:transform .55s cubic-bezier(.4,0,.2,1); }
 
     /* Card Back */
-    .flip-back { background:linear-gradient(145deg,#0a2744,#163a5e); border:2.5px solid #e8c840; display:flex; align-items:center; justify-content:center; }
+    .flip-back { background:linear-gradient(145deg,#0a2744,#163a5e); border:2.5px solid #e8c840; display:flex; align-items:center; justify-content:center; transform:rotateY(0deg); }
     .flip-back:hover { border-color:#ffd700; box-shadow:0 0 12px rgba(255,215,0,.3); }
+    .flip-slot.flipped .flip-back { transform:rotateY(180deg); }
     .pokeball { width:52px; height:52px; border-radius:50%; border:3px solid #222; background:linear-gradient(to bottom, #dc3535 50%, #f0f0f0 50%); position:relative; box-shadow:inset 0 2px 4px rgba(255,255,255,.2), 0 2px 8px rgba(0,0,0,.5); }
     .pokeball::before { content:''; position:absolute; top:50%; left:-3px; right:-3px; height:3px; background:#222; transform:translateY(-50%); }
     .pokeball::after { content:''; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:14px; height:14px; border-radius:50%; background:#f0f0f0; border:3px solid #222; z-index:1; }
 
     /* Card Front — must NOT override position:absolute inherited from .flip-face */
-    .flip-front { transform:rotateY(180deg); overflow:hidden; background:#111; border:2px solid transparent; }
+    .flip-front { transform:rotateY(-180deg); overflow:hidden; background:#111; border:2px solid transparent; }
+    .flip-slot.flipped .flip-front { transform:rotateY(0deg); }
     .flip-front img { width:100%; height:100%; object-fit:cover; display:block; }
 
     /* CSS fallback card when image fails */
@@ -477,15 +478,14 @@ const HOT_MONS = {
 //  Ultra/Secret rares reuse known holo cards (Mewtwo, Mew, Legendaries)
 //  so every image is a real TCG card photo that matches its name.
 // ════════════════════════════════════════
-function pokeArt(dexNum) {
-  // Official Pokemon artwork — reliable for every Pokédex number, no CDN guesswork
-  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${dexNum}.png`;
+function tcgImg(dexNum) {
+  // Confirmed: images.pokemontcg.io/sv3pt5/{n}.png uses unpadded numbers (6, not 006)
+  // Tested: sv3pt5/6.png → HTTP 200, sv3pt5/16.png → HTTP 200
+  return `https://images.pokemontcg.io/sv3pt5/${dexNum}.png`;
 }
 
 function offlineCard(name, emoji, rarity, dexNum) {
-  // isOffline:true → artwork-frame renderer (gradient bg + name label)
-  // avoids orientation/sizing issues inside 3D-transformed flip divs
-  return { name, emoji, rarity, isOffline: true, images:{ small: pokeArt(dexNum) } };
+  return { name, emoji, rarity, images:{ small: tcgImg(dexNum) } };
 }
 
 const OFFLINE_POOL = {
@@ -675,41 +675,58 @@ function loadPools() {
 }
 
 async function fetchPool(setId) {
-  if (cardPools[setId]) return false; // already in memory (or loaded from cache)
+  if (cardPools[setId]) return false; // already in memory / loaded from cache
 
-  abortCtrl = new AbortController();
-  const timeout = setTimeout(() => abortCtrl.abort(), 25000); // 25 s
-  showLoad(`Loading ${SET_META.find(s=>s.id===setId)?.name||setId}…`);
+  const setName = SET_META.find(s=>s.id===setId)?.name || setId;
 
-  try {
-    const r = await fetch(
-      `https://api.pokemontcg.io/v2/cards?q=set.id:${setId}&pageSize=250`,
-      { signal: abortCtrl.signal }
-    );
-    clearTimeout(timeout);
-    if (!r.ok) throw new Error('HTTP '+r.status);
-    const data = await r.json();
-
-    const pools = { common:[],uncommon:[],rare:[],holo:[],ultra:[],secret:[] };
-    for (const c of data.data) {
-      if (!c.images?.small) continue;
-      const t = getTier(c.rarity);
-      pools[t].push(c);
+  // Try up to 3 times with increasing delays
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    if (attempt > 1) {
+      showLoad(`Retrying ${setName}… (attempt ${attempt}/3)`);
+      await new Promise(r => setTimeout(r, attempt * 1500));
+    } else {
+      showLoad(`Loading ${setName}…`);
     }
-    // Guarantee every tier has at least the offline fallback cards
-    for (const t of TIER_ORDER) {
-      if (!pools[t].length) pools[t] = [...OFFLINE_POOL[t]||[]];
+
+    abortCtrl = new AbortController();
+    const timeout = setTimeout(() => abortCtrl.abort(), 20000);
+
+    try {
+      const r = await fetch(
+        `https://api.pokemontcg.io/v2/cards?q=set.id:${setId}&pageSize=250`,
+        { signal: abortCtrl.signal }
+      );
+      clearTimeout(timeout);
+      abortCtrl = null;
+
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const data = await r.json();
+      if (!data.data || !data.data.length) throw new Error('Empty response');
+
+      const pools = { common:[],uncommon:[],rare:[],holo:[],ultra:[],secret:[] };
+      for (const c of data.data) {
+        if (!c.images?.small) continue;
+        pools[getTier(c.rarity)].push(c);
+      }
+      for (const t of TIER_ORDER) {
+        if (!pools[t].length) pools[t] = [...OFFLINE_POOL[t]||[]];
+      }
+      cardPools[setId] = { ...pools, _live: true };
+      savePools();
+      hideLoad();
+      return false; // success — not offline
+
+    } catch(e) {
+      clearTimeout(timeout);
+      abortCtrl = null;
+      // If this was the last attempt, fall back to offline
+      if (attempt === 3) {
+        cardPools[setId] = { ...OFFLINE_POOL };
+        hideLoad();
+        return true; // offline
+      }
+      // Otherwise loop and retry
     }
-    cardPools[setId] = { ...pools, _live: true };
-    savePools(); // persist so next visit is instant
-    return false; // not offline
-  } catch(e) {
-    clearTimeout(timeout);
-    cardPools[setId] = { ...OFFLINE_POOL }; // offline fallback
-    return true;
-  } finally {
-    hideLoad();
-    abortCtrl = null;
   }
 }
 
