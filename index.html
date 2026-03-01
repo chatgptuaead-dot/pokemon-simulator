@@ -678,33 +678,39 @@ async function fetchPool(setId) {
   if (cardPools[setId]) return false; // already in memory / loaded from cache
 
   const setName = SET_META.find(s=>s.id===setId)?.name || setId;
+  showLoad(`Loading ${setName}…`);
 
-  // Try up to 3 times with increasing delays
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    if (attempt > 1) {
-      showLoad(`Retrying ${setName}… (attempt ${attempt}/3)`);
-      await new Promise(r => setTimeout(r, attempt * 1500));
-    } else {
-      showLoad(`Loading ${setName}…`);
+  // Two sources — GitHub data repo (fast, reliable) then pokemontcg.io as backup
+  const SOURCES = [
+    {
+      url: `https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/cards/en/${setId}.json`,
+      getCards: d => Array.isArray(d) ? d : (d.data || [])
+    },
+    {
+      url: `https://api.pokemontcg.io/v2/cards?q=set.id:${setId}&pageSize=250`,
+      getCards: d => d.data || []
     }
+  ];
+
+  for (let si = 0; si < SOURCES.length; si++) {
+    if (si > 0) showLoad(`Trying backup source for ${setName}…`);
+    const { url, getCards } = SOURCES[si];
 
     abortCtrl = new AbortController();
-    const timeout = setTimeout(() => abortCtrl.abort(), 20000);
+    const timeout = setTimeout(() => abortCtrl.abort(), 15000);
 
     try {
-      const r = await fetch(
-        `https://api.pokemontcg.io/v2/cards?q=set.id:${setId}&pageSize=250`,
-        { signal: abortCtrl.signal }
-      );
+      const r = await fetch(url, { signal: abortCtrl.signal });
       clearTimeout(timeout);
       abortCtrl = null;
 
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const data = await r.json();
-      if (!data.data || !data.data.length) throw new Error('Empty response');
+      const cards = getCards(data);
+      if (!cards.length) throw new Error('Empty response');
 
       const pools = { common:[],uncommon:[],rare:[],holo:[],ultra:[],secret:[] };
-      for (const c of data.data) {
+      for (const c of cards) {
         if (!c.images?.small) continue;
         pools[getTier(c.rarity)].push(c);
       }
@@ -714,20 +720,19 @@ async function fetchPool(setId) {
       cardPools[setId] = { ...pools, _live: true };
       savePools();
       hideLoad();
-      return false; // success — not offline
+      return false; // success
 
     } catch(e) {
       clearTimeout(timeout);
       abortCtrl = null;
-      // If this was the last attempt, fall back to offline
-      if (attempt === 3) {
-        cardPools[setId] = { ...OFFLINE_POOL };
-        hideLoad();
-        return true; // offline
-      }
-      // Otherwise loop and retry
+      // try next source
     }
   }
+
+  // All sources failed — use offline pool
+  cardPools[setId] = { ...OFFLINE_POOL };
+  hideLoad();
+  return true; // offline
 }
 
 function cancelLoad() {
