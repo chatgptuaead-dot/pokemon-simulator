@@ -394,8 +394,10 @@
       <option value="value-hi">Value ↓</option>
       <option value="value-lo">Value ↑</option>
       <option value="name">Name</option>
+      <option value="dex">Pokédex #</option>
     </select>
-    <button class="coll-act btn-sell-commons" onclick="sellCommons()">🗑 Sell All Commons</button>
+    <button class="coll-act btn-sell-commons" onclick="sellCommons()">🗑 Sell Commons</button>
+    <button class="coll-act btn-sell-commons" onclick="sellUncommons()" style="margin-left:.2rem">🗑 Sell Uncommons</button>
     <button class="coll-act btn-sell-sel" id="sellSelBtn" onclick="sellSelected()">Sell Selected</button>
     <span class="coll-summary" id="collSummary"></span>
   </div>
@@ -430,6 +432,7 @@
     <button class="m-btn m-keep"    onclick="keepAll()">✅ Keep All</button>
     <button class="m-btn m-commons" onclick="discardCommons()">🗑 Sell Commons</button>
     <button class="m-btn m-sell"    onclick="sellAllPack()">💰 Sell All (<span id="packTotalEl">$0</span>)</button>
+    <button class="m-btn" id="rebuyBtn" style="background:#1a3a1a;color:#4ddd4d;display:none" onclick="rebuyPack()">🔁 Open Another</button>
   </div>
 </div>
 
@@ -562,9 +565,29 @@ const TIER = {
   secret:   { label:'Secret Rare',color:'#ff3333', valueRange:[30.00,250.00]},
 };
 const TIER_ORDER = ['secret','ultra','holo','rare','uncommon','common'];
-// Real hit rates per TCGplayer data: Double Rare ~20%, Ultra Rare ~8-9%, SIR ~1-2%
-// Combined across rare + reverse holo slots: ~25% total hits per pack
+// Global fallback weights (unused when ERA_WEIGHTS matches)
 const RARE_WEIGHTS = { rare:.53, holo:.22, ultra:.20, secret:.05 };
+
+// Per-era weights sourced from TCGPlayer pull rate articles and community data
+// XY: EX ~1:12, Secret ~1:45 | SM: GX ~1:6, Rainbow ~1:35 | SWSH: V ~1:3, Rainbow ~1:25
+// SV: DR ~1:3-5, SIR ~1:20-25, HR ~1:60+ | ME: DR ~20%, UR ~8%, SIR ~1%, HR ~1%
+const ERA_WEIGHTS = {
+  'Mega Evolution': { rare:.50, holo:.17, ultra:.28, secret:.05 },
+  'Scarlet & Violet':{ rare:.50, holo:.22, ultra:.22, secret:.06 },
+  'Sword & Shield':  { rare:.48, holo:.22, ultra:.22, secret:.08 },
+  'Sun & Moon':      { rare:.55, holo:.26, ultra:.15, secret:.04 },
+  'XY':              { rare:.70, holo:.20, ultra:.08, secret:.02 },
+};
+
+// Premium/special sets with elevated secret/holo pull rates
+const SET_WEIGHTS = {
+  'sv8pt5':  { rare:.42, holo:.23, ultra:.22, secret:.13 }, // Prismatic Evolutions — 2× SIR rate (confirmed)
+  'sv4pt5':  { rare:.45, holo:.25, ultra:.20, secret:.10 }, // Paldean Fates — shiny-focused set
+  'sv3pt5':  { rare:.48, holo:.24, ultra:.20, secret:.08 }, // Pokémon 151
+  'swsh4pt5':{ rare:.40, holo:.28, ultra:.22, secret:.10 }, // Shining Fates — shiny VMAX focus
+  'sm115':   { rare:.45, holo:.26, ultra:.19, secret:.10 }, // Hidden Fates — shiny GX set
+  'sm35':    { rare:.50, holo:.28, ultra:.16, secret:.06 }, // Shining Legends — shining Pokémon
+};
 const HOT_MONS = {
   'charizard':{mn:2,mx:5},'pikachu':{mn:1.5,mx:3},'mewtwo':{mn:1.4,mx:2.8},
   'mew':{mn:1.3,mx:2.5},'umbreon':{mn:1.3,mx:2.2},'espeon':{mn:1.2,mx:2},
@@ -916,9 +939,11 @@ function drawPack(setId) {
   for (let i=0;i<6;i++) cards.push(pickFrom('common'));
   for (let i=0;i<3;i++) cards.push(pickFrom('uncommon'));
 
-  // Rare+ slot — only pick from tiers with cards
+  // Rare+ slot — use per-set or per-era weights, filtered to only non-empty tiers
+  const meta = SET_META.find(s=>s.id===setId);
+  const baseW = SET_WEIGHTS[setId] || ERA_WEIGHTS[meta?.series] || RARE_WEIGHTS;
   const available = Object.fromEntries(
-    Object.entries(RARE_WEIGHTS).filter(([t]) => (pools[t]||[]).length > 0)
+    Object.entries(baseW).filter(([t]) => (pools[t]||[]).length > 0)
   );
   const rareTier = Object.keys(available).length ? pickWeighted(available) : 'rare';
   cards.push(pickFrom(rareTier));
@@ -1046,6 +1071,7 @@ async function buyPack(setId) {
   if (!meta || S.money < meta.price) { toast('Not enough money!','err'); return; }
 
   S.money -= meta.price; S.stats.spent += meta.price; S.stats.packsOpened++;
+  S.lastPackId = setId; S.lastPackName = meta.name;
   updateMoney(); renderShop();
 
   try {
@@ -1058,6 +1084,15 @@ async function buyPack(setId) {
     updateMoney(); renderShop();
     toast('Something went wrong. Try again.','err');
   }
+}
+
+async function rebuyPack() {
+  if (!S.lastPackId) return;
+  const meta = SET_META.find(s=>s.id===S.lastPackId);
+  if (!meta || S.money < meta.price) { toast('Not enough money!','err'); return; }
+  document.getElementById('packModal').classList.remove('open');
+  S.pending = [];
+  await buyPack(S.lastPackId);
 }
 
 // ════════════════════════════════════════
@@ -1138,6 +1173,13 @@ function allFlipped() {
   const total = S.pending.reduce((s,c)=>s+c.value,0);
   document.getElementById('packTotalEl').textContent = fmt(total);
   document.getElementById('modalActions').classList.add('show');
+  // Show rebuy button if player can afford another pack
+  const meta = S.lastPackId && SET_META.find(s=>s.id===S.lastPackId);
+  const rebuy = document.getElementById('rebuyBtn');
+  if (rebuy && meta) {
+    rebuy.textContent = `🔁 Open Another ${meta.name}`;
+    rebuy.style.display = S.money >= meta.price ? '' : 'none';
+  }
 }
 
 function closeModal() { document.getElementById('packModal').classList.remove('open'); S.pending=[]; save(); }
@@ -1179,10 +1221,12 @@ function renderCollection() {
     return true;
   });
 
+  function dexNum(c) { const n=parseInt((c.number||'9999').replace(/\D.*$/,'')); return isNaN(n)?9999:n; }
   if (sort==='rarity')    cards.sort((a,b)=>TIER_ORDER.indexOf(a.tier)-TIER_ORDER.indexOf(b.tier)||b.value-a.value);
   else if (sort==='value-hi') cards.sort((a,b)=>b.value-a.value);
   else if (sort==='value-lo') cards.sort((a,b)=>a.value-b.value);
   else if (sort==='name')     cards.sort((a,b)=>a.name.localeCompare(b.name));
+  else if (sort==='dex')      cards.sort((a,b)=>dexNum(a)-dexNum(b)||a.name.localeCompare(b.name));
 
   const totalVal = S.inventory.reduce((s,c)=>s+c.value,0);
   document.getElementById('collSummary').textContent = `${S.inventory.length} cards · ${fmt(totalVal)} value`;
@@ -1274,6 +1318,17 @@ function sellCommons() {
   S.inventory=S.inventory.filter(c=>c.tier!=='common');
   commons.forEach(c=>selected.delete(c.uid));
   updateMoney(); toast(`Sold ${commons.length} commons for ${fmt(earned)}`,'ok');
+  renderCollection();
+}
+
+function sellUncommons() {
+  const uncommons=S.inventory.filter(c=>c.tier==='uncommon');
+  if (!uncommons.length) { toast('No uncommon cards to sell.'); return; }
+  const earned=uncommons.reduce((s,c)=>s+c.value,0);
+  S.money+=earned; S.stats.earned+=earned;
+  S.inventory=S.inventory.filter(c=>c.tier!=='uncommon');
+  uncommons.forEach(c=>selected.delete(c.uid));
+  updateMoney(); toast(`Sold ${uncommons.length} uncommons for ${fmt(earned)}`,'ok');
   renderCollection();
 }
 
@@ -2160,10 +2215,41 @@ function startMpBattle() {
 }
 
 // ════════════════════════════════════════
+//  SPECIAL CARD INJECTION
+// ════════════════════════════════════════
+function injectSpecialCards() {
+  if (localStorage.getItem('pokepack_gifts_v1')) return;
+  // Mega Greninja ex — Hyper Rare from Mega Evolution (me1)
+  // Added as a gift to the account with the second-highest packs opened
+  const greninja = {
+    uid: S.nextId++,
+    name: 'Greninja ex',
+    rarity: 'Hyper Rare',
+    tier: 'secret',
+    hp: '230',
+    number: '088',
+    attacks: [
+      { name: 'Water Shuriken', damage: '30', text: 'This attack does 30 damage to 3 of your opponent\'s Pokémon.' },
+      { name: 'Mega Hydro Blade', damage: '280', text: 'Discard 2 Water Energy from this Pokémon.' }
+    ],
+    images: { small: 'https://images.pokemontcg.io/me1/88.png' },
+    value: 89.99,
+    _marketPrice: 89.99,
+    setId: 'me1',
+  };
+  S.inventory.push(greninja);
+  trackBest(greninja);
+  save();
+  localStorage.setItem('pokepack_gifts_v1', '1');
+  toast('🌊 A Greninja ex Hyper Rare was added to your collection!', 'secret');
+}
+
+// ════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════
 load();
 loadPools();  // restore cached card pools from localStorage
+injectSpecialCards();
 renderShop();
 updateMoney();
 </script>
