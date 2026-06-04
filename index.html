@@ -210,6 +210,36 @@
     .rb-lbl { font-size:.68rem; font-weight:700; margin-bottom:.2rem; }
     .rb-n { font-size:1.4rem; font-weight:900; }
 
+    /* ── Card Detail Lightbox ── */
+    #cardDetail { display:none; position:fixed; inset:0; z-index:700; background:rgba(0,0,0,.92); align-items:center; justify-content:center; padding:1.2rem; }
+    #cardDetail.open { display:flex; }
+    .cd-box { background:var(--card); border-radius:22px; border:1px solid var(--border); max-width:360px; width:100%; display:flex; flex-direction:column; align-items:center; overflow:hidden; position:relative; animation:cdIn .22s ease; }
+    @keyframes cdIn { from{transform:scale(.88);opacity:0} to{transform:scale(1);opacity:1} }
+    .cd-close { position:absolute; top:.65rem; right:.75rem; background:rgba(0,0,0,.55); border:none; color:#fff; width:30px; height:30px; border-radius:50%; font-size:1rem; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:5; }
+    .cd-close:hover { background:rgba(255,255,255,.15); }
+    .cd-img-wrap { width:100%; display:flex; align-items:center; justify-content:center; padding:1.4rem 1.4rem .6rem; }
+    .cd-img { max-width:220px; width:100%; border-radius:14px; box-shadow:0 8px 40px rgba(0,0,0,.7); display:block; }
+    .cd-img-art { width:180px; height:252px; border-radius:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:1rem; }
+    .cd-img-art img { width:85%; flex:1; object-fit:contain; min-height:0; filter:drop-shadow(0 4px 12px rgba(0,0,0,.6)); }
+    .cd-img-art .cd-art-name { font-size:.8rem; font-weight:900; margin-top:.4rem; }
+    .cd-info { width:100%; padding:.6rem 1.3rem 1.4rem; display:flex; flex-direction:column; gap:.5rem; }
+    .cd-name { font-size:1.25rem; font-weight:900; text-align:center; }
+    .cd-meta { display:flex; justify-content:center; gap:1rem; font-size:.82rem; font-weight:800; }
+    .cd-rar { }
+    .cd-hp { color:var(--muted); }
+    .cd-val { font-size:1.4rem; font-weight:900; color:var(--gold); text-align:center; }
+    .cd-attacks { background:var(--card2); border-radius:10px; padding:.6rem .8rem; display:flex; flex-direction:column; gap:.35rem; }
+    .cd-atk { font-size:.78rem; }
+    .cd-atk-name { font-weight:900; }
+    .cd-atk-dmg { color:var(--gold); font-weight:900; margin-left:.35rem; }
+    .cd-atk-txt { color:var(--muted); font-size:.7rem; margin-top:.1rem; }
+    .cd-btns { display:flex; gap:.7rem; margin-top:.2rem; }
+    .cd-btn { flex:1; font-family:'Nunito',sans-serif; font-weight:900; font-size:.88rem; border:none; border-radius:50px; padding:.6rem 1rem; cursor:pointer; transition:transform .15s; }
+    .cd-btn:hover { transform:scale(1.04); }
+    .cd-btn-sell { background:linear-gradient(135deg,var(--gold-dk),var(--gold)); color:#111; }
+    .cd-btn-sel  { background:var(--card2); border:2px solid var(--border); color:var(--text); }
+    .cd-btn-sel.active { background:#2a2a00; border-color:var(--gold); color:var(--gold); }
+
     /* ── Empty ── */
     .empty { grid-column:1/-1; text-align:center; padding:3.5rem 2rem; color:var(--muted); }
     .empty .icon { font-size:3rem; margin-bottom:1rem; }
@@ -418,6 +448,26 @@
 <div class="page" id="statsPage">
   <div class="page-title">STATISTICS</div>
   <div class="stats-grid" id="statsGrid"></div>
+</div>
+
+<div id="cardDetail" onclick="closeCardDetail(event)">
+  <div class="cd-box" id="cdBox">
+    <button class="cd-close" onclick="closeCardDetail()">✕</button>
+    <div class="cd-img-wrap" id="cdImgWrap"></div>
+    <div class="cd-info">
+      <div class="cd-name" id="cdName"></div>
+      <div class="cd-meta">
+        <span class="cd-rar" id="cdRar"></span>
+        <span class="cd-hp" id="cdHp"></span>
+      </div>
+      <div class="cd-val" id="cdVal"></div>
+      <div class="cd-attacks" id="cdAtks" style="display:none"></div>
+      <div class="cd-btns">
+        <button class="cd-btn cd-btn-sel" id="cdSelBtn" onclick="cdToggleSel()"></button>
+        <button class="cd-btn cd-btn-sell" id="cdSellBtn" onclick="cdSell()"></button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div id="packModal">
@@ -802,7 +852,8 @@ function estimateValue(card) {
 //  API  (with timeout + graceful fallback)
 // ════════════════════════════════════════
 // ── Pool cache (localStorage) ─────────────────────────────────────────────
-const POOL_CACHE_KEY = 'pkpack_pools_v8';
+// v9: re-fetches all sets so live pokemontcg.io prices replace stale GitHub snapshots
+const POOL_CACHE_KEY = 'pkpack_pools_v9';
 
 function savePools() {
   try {
@@ -813,9 +864,9 @@ function savePools() {
       for (const [tier, cards] of Object.entries(v)) {
         if (tier === '_live') continue;
         out[k][tier] = cards.map(c => ({
-          id: c.id, name: c.name, hp: c.hp, rarity: c.rarity,
+          id: c.id, name: c.name, hp: c.hp, rarity: c.rarity, number: c.number||'',
           attacks: (c.attacks||[]).map(a => ({ name: a.name, damage: a.damage, text: (a.text||'').slice(0,120) })),
-          images: { small: c.images?.small||'' },
+          images: { small: c.images?.small||'', large: c.images?.large||'' },
           _marketPrice: c._marketPrice || null
         }));
       }
@@ -1256,7 +1307,7 @@ function renderCollection() {
          </div>`;
     return `
       <div class="inv-card tier-${c.tier}${selected.has(c.uid)?' selected':''}"
-           id="ic${c.uid}" onclick="toggleSel(${c.uid})">
+           id="ic${c.uid}" onclick="openCardDetail(${c.uid})">
         <div class="inv-check">✓</div>
         ${imgSection}
         <div class="inv-info">
@@ -1290,6 +1341,81 @@ function updateSelBtn() {
   const total = S.inventory.filter(c=>selected.has(c.uid)).reduce((s,c)=>s+c.value,0);
   btn.textContent = `💰 Sell Selected (${fmt(total)})`;
   btn.classList.add('show');
+}
+
+let _cdUid = null;
+
+function openCardDetail(uid) {
+  const c = S.inventory.find(x=>x.uid===uid); if(!c) return;
+  _cdUid = uid;
+  const tc = TIER[c.tier];
+
+  // Image
+  const imgWrap = document.getElementById('cdImgWrap');
+  if (c.isOffline) {
+    imgWrap.innerHTML = `
+      <div class="cd-img-art" style="background:linear-gradient(160deg,${tc.color}55 0%,#0d0d20 70%)">
+        <img src="${c.images?.small||''}" alt="${c.name}" style="width:85%;flex:1;object-fit:contain;min-height:0;filter:drop-shadow(0 4px 12px rgba(0,0,0,.6))" onerror="this.style.display='none'">
+        <div class="cd-art-name">${c.name}</div>
+      </div>`;
+  } else {
+    imgWrap.innerHTML = `
+      <img class="cd-img" src="${c.images?.large||c.images?.small||''}" alt="${c.name}"
+           onerror="this.src='${c.images?.small||''}'" style="border:3px solid ${tc.color}">`;
+  }
+
+  document.getElementById('cdName').textContent = c.name;
+  document.getElementById('cdRar').textContent  = tc.label;
+  document.getElementById('cdRar').style.color  = tc.color;
+  document.getElementById('cdHp').textContent   = c.hp ? `${c.hp} HP` : '';
+  document.getElementById('cdVal').textContent  = fmt(c.value);
+
+  // Attacks
+  const atksEl = document.getElementById('cdAtks');
+  if (c.attacks && c.attacks.length) {
+    atksEl.style.display = '';
+    atksEl.innerHTML = c.attacks.map(a => `
+      <div class="cd-atk">
+        <div><span class="cd-atk-name">${a.name}</span>${parseDmg(a.damage)>0?`<span class="cd-atk-dmg">${parseDmg(a.damage)} dmg</span>`:''}</div>
+        ${a.text?`<div class="cd-atk-txt">${a.text.slice(0,120)}${a.text.length>120?'…':''}</div>`:''}
+      </div>`).join('');
+  } else {
+    atksEl.style.display = 'none';
+  }
+
+  // Buttons
+  const selBtn = document.getElementById('cdSelBtn');
+  selBtn.textContent = selected.has(uid) ? '✓ Selected' : '+ Select';
+  selBtn.classList.toggle('active', selected.has(uid));
+  document.getElementById('cdSellBtn').textContent = `💰 Sell ${fmt(c.value)}`;
+
+  document.getElementById('cardDetail').classList.add('open');
+}
+
+function closeCardDetail(e) {
+  if (e && e.target !== document.getElementById('cardDetail')) return;
+  document.getElementById('cardDetail').classList.remove('open');
+  _cdUid = null;
+}
+
+function cdToggleSel() {
+  if (_cdUid === null) return;
+  if (selected.has(_cdUid)) selected.delete(_cdUid); else selected.add(_cdUid);
+  const selBtn = document.getElementById('cdSelBtn');
+  selBtn.textContent = selected.has(_cdUid) ? '✓ Selected' : '+ Select';
+  selBtn.classList.toggle('active', selected.has(_cdUid));
+  updateSelBtn();
+}
+
+function cdSell() {
+  if (_cdUid === null) return;
+  const c = S.inventory.find(x=>x.uid===_cdUid); if(!c) return;
+  S.money+=c.value; S.stats.earned+=c.value;
+  S.inventory=S.inventory.filter(x=>x.uid!==_cdUid); selected.delete(_cdUid);
+  document.getElementById('cardDetail').classList.remove('open');
+  _cdUid = null;
+  updateMoney(); toast(`Sold ${c.name} for ${fmt(c.value)}`,'ok');
+  renderCollection();
 }
 
 function quickSell(uid) {
