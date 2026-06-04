@@ -607,12 +607,12 @@ function getTier(rarity) {
   return 'common';
 }
 const TIER = {
-  common:   { label:'Common',     color:'#999',    valueRange:[0.05, 0.35]  },
-  uncommon: { label:'Uncommon',   color:'#3ddc5a', valueRange:[0.30, 1.80]  },
-  rare:     { label:'Rare',       color:'#4a8fe8', valueRange:[0.80, 6.00]  },
-  holo:     { label:'Holo Rare',  color:'#c060ff', valueRange:[2.00, 25.00] },
-  ultra:    { label:'Ultra Rare', color:'#ff8800', valueRange:[6.00, 70.00] },
-  secret:   { label:'Secret Rare',color:'#ff3333', valueRange:[30.00,250.00]},
+  common:   { label:'Common',     color:'#999',    valueRange:[0.05, 0.30]  },
+  uncommon: { label:'Uncommon',   color:'#3ddc5a', valueRange:[0.20, 1.20]  },
+  rare:     { label:'Rare',       color:'#4a8fe8', valueRange:[0.50, 4.00]  },
+  holo:     { label:'Holo Rare',  color:'#c060ff', valueRange:[1.00, 10.00] },
+  ultra:    { label:'Ultra Rare', color:'#ff8800', valueRange:[0.50,  6.00] }, // most ex/DR: $0.50-3, premium: $3-6
+  secret:   { label:'Secret Rare',color:'#ff3333', valueRange:[15.00, 80.00]},
 };
 const TIER_ORDER = ['secret','ultra','holo','rare','uncommon','common'];
 // Global fallback weights (unused when ERA_WEIGHTS matches)
@@ -638,11 +638,12 @@ const SET_WEIGHTS = {
   'sm115':   { rare:.45, holo:.26, ultra:.19, secret:.10 }, // Hidden Fates — shiny GX set
   'sm35':    { rare:.50, holo:.28, ultra:.16, secret:.06 }, // Shining Legends — shining Pokémon
 };
+// Multipliers only used for fallback estimates (no market price). Keep small — real prices already handle popularity.
 const HOT_MONS = {
-  'charizard':{mn:2,mx:5},'pikachu':{mn:1.5,mx:3},'mewtwo':{mn:1.4,mx:2.8},
-  'mew':{mn:1.3,mx:2.5},'umbreon':{mn:1.3,mx:2.2},'espeon':{mn:1.2,mx:2},
-  'lugia':{mn:1.3,mx:2.2},'rayquaza':{mn:1.2,mx:2},'gengar':{mn:1.1,mx:1.8},
-  'eevee':{mn:1.1,mx:1.6},
+  'charizard':{mn:1.3,mx:2.2},'pikachu':{mn:1.2,mx:1.8},'mewtwo':{mn:1.2,mx:1.7},
+  'mew':{mn:1.1,mx:1.6},'umbreon':{mn:1.1,mx:1.5},'espeon':{mn:1.1,mx:1.4},
+  'lugia':{mn:1.1,mx:1.5},'rayquaza':{mn:1.1,mx:1.4},'gengar':{mn:1.1,mx:1.3},
+  'eevee':{mn:1.1,mx:1.3},
 };
 
 // ════════════════════════════════════════
@@ -845,15 +846,15 @@ function estimateValue(card) {
   for (const [mon,m] of Object.entries(HOT_MONS)) {
     if (name.includes(mon)) { v *= rand(m.mn, m.mx); break; }
   }
-  return Math.min(parseFloat(v.toFixed(2)), mx*5);
+  return Math.min(parseFloat(v.toFixed(2)), mx*2);
 }
 
 // ════════════════════════════════════════
 //  API  (with timeout + graceful fallback)
 // ════════════════════════════════════════
 // ── Pool cache (localStorage) ─────────────────────────────────────────────
-// v9: re-fetches all sets so live pokemontcg.io prices replace stale GitHub snapshots
-const POOL_CACHE_KEY = 'pkpack_pools_v9';
+// v10: pokemontcg.io now primary source (has live TCGPlayer prices); GitHub has none
+const POOL_CACHE_KEY = 'pkpack_pools_v10';
 
 function savePools() {
   try {
@@ -887,75 +888,84 @@ function loadPools() {
 }
 
 async function fetchPool(setId) {
-  if (cardPools[setId]) return false; // already in memory / loaded from cache
+  if (cardPools[setId]) return false;
 
   const setName = SET_META.find(s=>s.id===setId)?.name || setId;
   showLoad(`Loading ${setName}…`);
 
-  // Two sources — GitHub data repo (fast, reliable) then pokemontcg.io as backup
-  const SOURCES = [
-    {
-      url: `https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/cards/en/${setId}.json`,
-      getCards: d => Array.isArray(d) ? d : (d.data || [])
-    },
-    {
-      url: `https://api.pokemontcg.io/v2/cards?q=set.id:${setId}&pageSize=250`,
-      getCards: d => d.data || []
-    }
-  ];
+  // pokemontcg.io first — has live TCGPlayer market prices embedded in every card.
+  // GitHub JSON is price-free (confirmed); only use as last resort for card images/data.
+  let allCards = null;
 
-  for (let si = 0; si < SOURCES.length; si++) {
-    if (si > 0) showLoad(`Trying backup source for ${setName}…`);
-    const { url, getCards } = SOURCES[si];
-
-    abortCtrl = new AbortController();
-    const timeout = setTimeout(() => abortCtrl.abort(), 15000);
-
-    try {
-      const r = await fetch(url, { signal: abortCtrl.signal });
-      clearTimeout(timeout);
-      abortCtrl = null;
-
+  // ── Source 1: pokemontcg.io with full pagination ──────────────────────
+  try {
+    const cards = [];
+    let page = 1;
+    while (true) {
+      abortCtrl = new AbortController();
+      const timeout = setTimeout(() => abortCtrl.abort(), 15000);
+      const r = await fetch(
+        `https://api.pokemontcg.io/v2/cards?q=set.id:${setId}&pageSize=250&page=${page}`,
+        { signal: abortCtrl.signal }
+      );
+      clearTimeout(timeout); abortCtrl = null;
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const data = await r.json();
-      const cards = getCards(data);
-      if (!cards.length) throw new Error('Empty response');
-
-      const pools = { common:[],uncommon:[],rare:[],holo:[],ultra:[],secret:[] };
-      for (const c of cards) {
-        if (!c.images?.small) continue;
-        const mp = extractMarketPrice(c);
-        c._marketPrice = mp;
-        let tier = mp ? tierFromPrice(mp) : getTier(c.rarity);
-        // Enforce minimum tier based on card subtypes so ex/V/VMAX/VSTAR cards
-        // always look premium even when cheaply priced
-        const subs = c.subtypes || [];
-        if (subs.some(s => s==='VSTAR' || s==='VMAX' || s==='TAG TEAM')) {
-          if (TIER_ORDER.indexOf(tier) > TIER_ORDER.indexOf('ultra')) tier = 'ultra';
-        } else if (subs.some(s => s==='V' || s==='GX' || s==='EX' || s==='ex' || s==='Radiant')) {
-          if (TIER_ORDER.indexOf(tier) > TIER_ORDER.indexOf('holo')) tier = 'holo';
-        }
-        pools[tier].push(c);
-      }
-      for (const t of TIER_ORDER) {
-        if (!pools[t].length) pools[t] = [...OFFLINE_POOL[t]||[]];
-      }
-      cardPools[setId] = { ...pools, _live: true };
-      savePools();
-      hideLoad();
-      return false; // success
-
-    } catch(e) {
-      clearTimeout(timeout);
-      abortCtrl = null;
-      // try next source
+      const batch = data.data || [];
+      cards.push(...batch);
+      if (batch.length < 250) break; // last page
+      page++;
+      showLoad(`Loading ${setName}… (${cards.length} cards)`);
     }
+    if (cards.length) allCards = cards;
+  } catch(e) { abortCtrl = null; }
+
+  // ── Source 2: GitHub JSON (no prices, but good image/attack data) ─────
+  if (!allCards) {
+    try {
+      abortCtrl = new AbortController();
+      const timeout = setTimeout(() => abortCtrl.abort(), 15000);
+      showLoad(`Trying backup source for ${setName}…`);
+      const r = await fetch(
+        `https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/cards/en/${setId}.json`,
+        { signal: abortCtrl.signal }
+      );
+      clearTimeout(timeout); abortCtrl = null;
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const data = await r.json();
+      const batch = Array.isArray(data) ? data : (data.data || []);
+      if (batch.length) allCards = batch;
+    } catch(e) { abortCtrl = null; }
   }
 
-  // All sources failed — use offline pool
+  if (allCards && allCards.length) {
+    const pools = { common:[],uncommon:[],rare:[],holo:[],ultra:[],secret:[] };
+    for (const c of allCards) {
+      if (!c.images?.small) continue;
+      const mp = extractMarketPrice(c);
+      c._marketPrice = mp;
+      let tier = mp ? tierFromPrice(mp) : getTier(c.rarity);
+      const subs = c.subtypes || [];
+      if (subs.some(s => s==='VSTAR' || s==='VMAX' || s==='TAG TEAM')) {
+        if (TIER_ORDER.indexOf(tier) > TIER_ORDER.indexOf('ultra')) tier = 'ultra';
+      } else if (subs.some(s => s==='V' || s==='GX' || s==='EX' || s==='ex' || s==='Radiant')) {
+        if (TIER_ORDER.indexOf(tier) > TIER_ORDER.indexOf('holo')) tier = 'holo';
+      }
+      pools[tier].push(c);
+    }
+    for (const t of TIER_ORDER) {
+      if (!pools[t].length) pools[t] = [...OFFLINE_POOL[t]||[]];
+    }
+    cardPools[setId] = { ...pools, _live: true };
+    savePools();
+    hideLoad();
+    return false;
+  }
+
+  // All sources failed
   cardPools[setId] = { ...OFFLINE_POOL };
   hideLoad();
-  return true; // offline
+  return true;
 }
 
 function cancelLoad() {
