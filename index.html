@@ -365,6 +365,7 @@
     </div>
     <select class="series-sel" id="seriesSel" onchange="renderShop()">
       <option value="all">All Series</option>
+      <option value="Mega Evolution">Mega Evolution</option>
       <option value="Scarlet &amp; Violet">Scarlet &amp; Violet</option>
       <option value="Sword &amp; Shield">Sword &amp; Shield</option>
       <option value="Sun &amp; Moon">Sun &amp; Moon</option>
@@ -445,8 +446,17 @@
 //  SET LIST
 // ════════════════════════════════════════
 const SET_META = [
+  // ── Mega Evolution ───────────────────────────────────────────────────────
+  { id:'me4',    name:'Chaos Rising',           series:'Mega Evolution',   price:5.49, desc:'The fourth Mega Evolution set erupts',      hot:true  },
+  { id:'me3',    name:'Perfect Order',          series:'Mega Evolution',   price:4.99, desc:'Mega Pokémon reach ultimate harmony'                   },
+  { id:'me2pt5', name:'Ascended Heroes',        series:'Mega Evolution',   price:4.99, desc:'13 Mega Evolution ex across every type'               },
+  { id:'me2',    name:'Phantasmal Flames',      series:'Mega Evolution',   price:4.99, desc:'Blazing new Mega Pokémon take flight'                 },
+  { id:'me1',    name:'Mega Evolution',         series:'Mega Evolution',   price:4.99, desc:'MEGA Evolution returns as the core mechanic'          },
   // ── Scarlet & Violet ──────────────────────────────────────────────────────
-  { id:'sv9',    name:'Journey Together',       series:'Scarlet & Violet', price:4.99, desc:'Legendary bonds in Paldea and beyond',     hot:true  },
+  { id:'rsv10pt5', name:'White Flare',          series:'Scarlet & Violet', price:4.99, desc:'Unova Pokémon in the dual White Flare set',  hot:true  },
+  { id:'zsv10pt5', name:'Black Bolt',           series:'Scarlet & Violet', price:4.99, desc:'Unova Pokémon in the dual Black Bolt set',   hot:true  },
+  { id:'sv10',   name:'Destined Rivals',        series:'Scarlet & Violet', price:4.99, desc:'244 cards — rivals clash across Paldea',     hot:true  },
+  { id:'sv9',    name:'Journey Together',       series:'Scarlet & Violet', price:4.99, desc:'Legendary bonds in Paldea and beyond',       hot:true  },
   { id:'sv8pt5', name:'Prismatic Evolutions',   series:'Scarlet & Violet', price:5.49, desc:'The ultimate Eevee evolution set',         hot:true  },
   { id:'sv8',    name:'Surging Sparks',         series:'Scarlet & Violet', price:4.99, desc:'Terapagos ex and Pikachu ex'                         },
   { id:'sv7',    name:'Stellar Crown',          series:'Scarlet & Violet', price:4.99, desc:'Stellar Tera-type Pokémon shine'                     },
@@ -463,7 +473,7 @@ const SET_META = [
   { id:'swsh12pt5', name:'Crown Zenith',        series:'Sword & Shield',   price:4.49, desc:'The grand Sword & Shield era finale'                 },
   { id:'swsh12',    name:'Silver Tempest',      series:'Sword & Shield',   price:4.49, desc:'Lugia VSTAR soars above all'                         },
   { id:'swsh11',    name:'Lost Origin',         series:'Sword & Shield',   price:4.49, desc:'The Lost Zone dimension opens'                       },
-  { id:'swsh10pt5', name:'Pokémon GO',          series:'Sword & Shield',   price:4.49, desc:'Radiant Pokémon and GO-themed cards'                 },
+  { id:'pgo',       name:'Pokémon GO',           series:'Sword & Shield',   price:4.49, desc:'Radiant Pokémon and GO-themed cards'                 },
   { id:'swsh10',    name:'Astral Radiance',     series:'Sword & Shield',   price:4.49, desc:'Origin Forme legends descend'                        },
   { id:'swsh9',     name:'Brilliant Stars',     series:'Sword & Shield',   price:4.49, desc:'VSTAR mechanic makes its debut'                      },
   { id:'swsh8',     name:'Fusion Strike',       series:'Sword & Shield',   price:4.49, desc:'Biggest SWSH set with Mew VMAX'                      },
@@ -552,8 +562,9 @@ const TIER = {
   secret:   { label:'Secret Rare',color:'#ff3333', valueRange:[30.00,250.00]},
 };
 const TIER_ORDER = ['secret','ultra','holo','rare','uncommon','common'];
-// Weights match real booster pack hit rates: ~55% rare, ~27% holo, ~13% ultra, ~5% secret
-const RARE_WEIGHTS = { rare:.55, holo:.27, ultra:.13, secret:.05 };
+// Real hit rates per TCGplayer data: Double Rare ~20%, Ultra Rare ~8-9%, SIR ~1-2%
+// Combined across rare + reverse holo slots: ~25% total hits per pack
+const RARE_WEIGHTS = { rare:.53, holo:.22, ultra:.20, secret:.05 };
 const HOT_MONS = {
   'charizard':{mn:2,mx:5},'pikachu':{mn:1.5,mx:3},'mewtwo':{mn:1.4,mx:2.8},
   'mew':{mn:1.3,mx:2.5},'umbreon':{mn:1.3,mx:2.2},'espeon':{mn:1.2,mx:2},
@@ -968,6 +979,7 @@ function trackBest(c)  { if(!S.stats.bestPull||c.value>S.stats.bestPull.value) S
 //  SHOP
 // ════════════════════════════════════════
 const SERIES_BG = {
+  'Mega Evolution'  :'linear-gradient(145deg,#1a0a00,#3a1500)',
   'Scarlet & Violet':'linear-gradient(145deg,#1a0030,#3a0060)',
   'Sword & Shield'  :'linear-gradient(145deg,#001a30,#003060)',
   'Sun & Moon'      :'linear-gradient(145deg,#201000,#503000)',
