@@ -2405,7 +2405,23 @@ function injectSpecialCards() {
 // ════════════════════════════════════════
 load();
 loadPools();  // restore cached card pools from localStorage
-for (const sid of Object.keys(cardPools)) { repriceInventoryFromPool(sid); }
+// Build one price map from all cached pools, reprice inventory once, save once
+{
+  const pm = {};
+  for (const sid of Object.keys(cardPools)) {
+    const pool = cardPools[sid];
+    if (!pool) continue;
+    for (const tier of Object.values(pool)) {
+      if (!Array.isArray(tier)) continue;
+      for (const c of tier) if (c.id && c._marketPrice > 0) pm[c.id] = c._marketPrice;
+    }
+  }
+  let changed = false;
+  for (const inv of S.inventory) {
+    if (inv.id && pm[inv.id] !== undefined) { inv.value = parseFloat(pm[inv.id].toFixed(2)); changed = true; }
+  }
+  if (changed) save();
+}
 injectSpecialCards();
 renderShop();
 updateMoney();
