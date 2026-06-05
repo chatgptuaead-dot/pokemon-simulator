@@ -610,9 +610,9 @@ const TIER = {
   common:   { label:'Common',     color:'#999',    valueRange:[0.05, 0.30]  },
   uncommon: { label:'Uncommon',   color:'#3ddc5a', valueRange:[0.20, 1.20]  },
   rare:     { label:'Rare',       color:'#4a8fe8', valueRange:[0.50, 4.00]  },
-  holo:     { label:'Holo Rare',  color:'#c060ff', valueRange:[1.00, 10.00] },
-  ultra:    { label:'Ultra Rare', color:'#ff8800', valueRange:[0.50,  6.00] }, // most ex/DR: $0.50-3, premium: $3-6
-  secret:   { label:'Secret Rare',color:'#ff3333', valueRange:[15.00, 80.00]},
+  holo:     { label:'Holo Rare',  color:'#c060ff', valueRange:[0.75,  6.00] }, // XY/SM holos: $0.75-3; newer: $2-6
+  ultra:    { label:'Ultra Rare', color:'#ff8800', valueRange:[0.75,  8.00] }, // EX/GX/V/DR: most $1-4, premium $5-8
+  secret:   { label:'Secret Rare',color:'#ff3333', valueRange:[6.00, 40.00] }, // XY HR: $5-20; SM rainbow: $5-25; SV SIR: $10-40+
 };
 const TIER_ORDER = ['secret','ultra','holo','rare','uncommon','common'];
 // Global fallback weights (unused when ERA_WEIGHTS matches)
@@ -838,10 +838,14 @@ function estimateValue(card) {
   if (card._marketPrice > 0) {
     return parseFloat(card._marketPrice.toFixed(2));
   }
-  // Fallback when no TCGPlayer data: fixed estimate from rarity (no random, no HOT_MONS)
+  // Fallback when no TCGPlayer data: midpoint of range, boosted for popular Pokémon
   const t = card.tier || getTier(card.rarity);
   const [mn, mx] = TIER[t]?.valueRange || TIER.common.valueRange;
-  return parseFloat(((mn + mx) / 2).toFixed(2)); // midpoint of range, deterministic
+  const base = (mn + mx) / 2;
+  const nameKey = (card.name || '').toLowerCase().split(' ')[0];
+  const hot = HOT_MONS[nameKey];
+  const mult = hot ? (hot.mn + hot.mx) / 2 : 1;
+  return parseFloat((base * mult).toFixed(2));
 }
 
 // Re-prices existing inventory cards using current pool market data.
@@ -1000,12 +1004,22 @@ function drawPack(setId) {
   const pools = cardPools[setId];
   const cards = [];
 
+  const OFFLINE_HP = { secret:'220', ultra:'170', holo:'130', rare:'110', uncommon:'90', common:'70' };
+  function addOfflineDefaults(card, t) {
+    // Offline pool cards (identified by emoji field) have no hp/attacks — add defaults
+    if (card.emoji && (!card.attacks || !card.attacks.length)) {
+      card.hp = card.hp || OFFLINE_HP[t] || '70';
+      card.attacks = [{ name:'Tackle', damage:'10', text:'' }];
+    }
+    return card;
+  }
+
   function pickFrom(tier, depth=0) {
     if (depth > 5) {
       // absolute fallback: return a guaranteed common
       const fb = OFFLINE_POOL.common;
       const raw = fb[Math.floor(Math.random()*fb.length)];
-      return { ...raw, tier:'common', value: estimateValue(raw) };
+      return addOfflineDefaults({ ...raw, tier:'common', value: estimateValue(raw) }, 'common');
     }
     const p = pools[tier];
     if (!p || !p.length) {
@@ -1015,7 +1029,7 @@ function drawPack(setId) {
       return pickFrom(next, depth+1);
     }
     const raw = p[Math.floor(Math.random()*p.length)];
-    return { ...raw, tier, value: estimateValue(raw) };
+    return addOfflineDefaults({ ...raw, tier, value: estimateValue(raw) }, tier);
   }
 
   for (let i=0;i<6;i++) cards.push(pickFrom('common'));
@@ -2475,14 +2489,19 @@ loadPools();  // restore cached card pools from localStorage
       for (const c of tier) if (c.id && c._marketPrice > 0) pm[c.id] = c._marketPrice;
     }
   }
+  const HP_BY_TIER = { secret:'220', ultra:'170', holo:'130', rare:'110', uncommon:'90', common:'70' };
   let changed = false;
   for (const inv of S.inventory) {
     if (inv.id && pm[inv.id] !== undefined) { inv.value = parseFloat(pm[inv.id].toFixed(2)); changed = true; }
+    // Fix offline-pool cards already in inventory that are missing hp/attacks
+    if (inv.emoji && (!inv.attacks || !inv.attacks.length)) {
+      inv.hp = inv.hp || HP_BY_TIER[inv.tier] || '70';
+      inv.attacks = [{ name:'Tackle', damage:'10', text:'' }];
+      changed = true;
+    }
   }
   if (changed) save();
 }
-injectSpecialCards();
-injectSpecialCards_v2();
 renderShop();
 updateMoney();
 </script>
