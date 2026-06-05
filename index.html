@@ -873,7 +873,7 @@ function repriceInventoryFromPool(setId) {
 // ════════════════════════════════════════
 // ── Pool cache (localStorage) ─────────────────────────────────────────────
 // v10: pokemontcg.io now primary source (has live TCGPlayer prices); GitHub has none
-const POOL_CACHE_KEY = 'pkpack_pools_v10';
+const POOL_CACHE_KEY = 'pkpack_pools_v11';
 
 function savePools() {
   try {
@@ -885,6 +885,7 @@ function savePools() {
         if (tier === '_live') continue;
         out[k][tier] = cards.map(c => ({
           id: c.id, name: c.name, hp: c.hp, rarity: c.rarity, number: c.number||'',
+          dexNum: (c.nationalPokedexNumbers||[])[0] || null,
           attacks: (c.attacks||[]).map(a => ({ name: a.name, damage: a.damage, text: (a.text||'').slice(0,120) })),
           images: { small: c.images?.small||'', large: c.images?.large||'' },
           _marketPrice: c._marketPrice || null
@@ -1304,7 +1305,7 @@ function renderCollection() {
     return true;
   });
 
-  function dexNum(c) { const n=parseInt((c.number||'9999').replace(/\D.*$/,'')); return isNaN(n)?9999:n; }
+  function dexNum(c) { return c.dexNum || 9999; }
   if (sort==='rarity')    cards.sort((a,b)=>TIER_ORDER.indexOf(a.tier)-TIER_ORDER.indexOf(b.tier)||b.value-a.value);
   else if (sort==='value-hi') cards.sort((a,b)=>b.value-a.value);
   else if (sort==='value-lo') cards.sort((a,b)=>a.value-b.value);
