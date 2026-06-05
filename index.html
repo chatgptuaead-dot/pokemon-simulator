@@ -834,19 +834,38 @@ function tierFromPrice(price) {
 }
 
 function estimateValue(card) {
-  // Use real market price when available (±20% variance for realism)
+  // Use exact market price — no variance so duplicate cards always show the same price
   if (card._marketPrice > 0) {
-    return parseFloat((card._marketPrice * rand(0.8, 1.2)).toFixed(2));
+    return parseFloat(card._marketPrice.toFixed(2));
   }
-  // Fallback: estimate from rarity label
+  // Fallback when no TCGPlayer data: fixed estimate from rarity (no random, no HOT_MONS)
   const t = card.tier || getTier(card.rarity);
-  const [mn,mx] = TIER[t]?.valueRange || TIER.common.valueRange;
-  let v = rand(mn, mx);
-  const name = (card.name||'').toLowerCase();
-  for (const [mon,m] of Object.entries(HOT_MONS)) {
-    if (name.includes(mon)) { v *= rand(m.mn, m.mx); break; }
+  const [mn, mx] = TIER[t]?.valueRange || TIER.common.valueRange;
+  return parseFloat(((mn + mx) / 2).toFixed(2)); // midpoint of range, deterministic
+}
+
+// Re-prices existing inventory cards using current pool market data.
+// Called after every successful pool fetch so old wrong prices get corrected.
+function repriceInventoryFromPool(setId) {
+  const pool = cardPools[setId];
+  if (!pool) return;
+  // Build id→marketPrice map from all tiers in this pool
+  const priceMap = {};
+  for (const tier of Object.values(pool)) {
+    if (!Array.isArray(tier)) continue;
+    for (const c of tier) {
+      if (c.id && c._marketPrice > 0) priceMap[c.id] = c._marketPrice;
+    }
   }
-  return Math.min(parseFloat(v.toFixed(2)), mx*2);
+  if (!Object.keys(priceMap).length) return;
+  let changed = false;
+  for (const inv of S.inventory) {
+    if (inv.id && priceMap[inv.id] !== undefined) {
+      inv.value = parseFloat(priceMap[inv.id].toFixed(2));
+      changed = true;
+    }
+  }
+  if (changed) { save(); updateMoney(); }
 }
 
 // ════════════════════════════════════════
@@ -958,6 +977,7 @@ async function fetchPool(setId) {
     }
     cardPools[setId] = { ...pools, _live: true };
     savePools();
+    repriceInventoryFromPool(setId);
     hideLoad();
     return false;
   }
@@ -2385,6 +2405,7 @@ function injectSpecialCards() {
 // ════════════════════════════════════════
 load();
 loadPools();  // restore cached card pools from localStorage
+for (const sid of Object.keys(cardPools)) { repriceInventoryFromPool(sid); }
 injectSpecialCards();
 renderShop();
 updateMoney();
