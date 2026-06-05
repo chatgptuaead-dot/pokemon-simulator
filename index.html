@@ -2403,6 +2403,62 @@ function injectSpecialCards() {
   toast('🌊 A Greninja ex Hyper Rare was added to your collection!', 'secret');
 }
 
+function injectSpecialCards_v2() {
+  if (localStorage.getItem('pokepack_gifts_v2')) return;
+  const charizardSIR = {
+    uid: S.nextId++,
+    id: 'sv3pt5-199',
+    name: 'Charizard ex',
+    rarity: 'Special Illustration Rare',
+    tier: 'secret',
+    hp: '330',
+    number: '199',
+    dexNum: 6,
+    attacks: [
+      { name: 'Brave Wing', damage: '60+', text: 'If this Pokémon has any damage counters on it, this attack does 100 more damage.' },
+      { name: 'Explosive Vortex', damage: '330', text: 'Discard 3 Energy from this Pokémon.' }
+    ],
+    images: { small: 'https://images.pokemontcg.io/sv3pt5/199.png' },
+    value: 474.96, _marketPrice: 474.96, setId: 'sv3pt5',
+  };
+  const charmanderIR = {
+    uid: S.nextId++,
+    id: 'sv3pt5-168',
+    name: 'Charmander',
+    rarity: 'Illustration Rare',
+    tier: 'secret',
+    hp: '70',
+    number: '168',
+    dexNum: 4,
+    attacks: [
+      { name: 'Blazing Destruction', damage: '', text: 'Discard a Stadium in play.' },
+      { name: 'Steady Firebreathing', damage: '30', text: '' }
+    ],
+    images: { small: 'https://images.pokemontcg.io/sv3pt5/168.png' },
+    value: 129.84, _marketPrice: 129.84, setId: 'sv3pt5',
+  };
+  const rotomV = {
+    uid: S.nextId++,
+    id: 'swsh11-177',
+    name: 'Rotom V',
+    rarity: 'Rare Ultra',
+    tier: 'ultra',
+    hp: '190',
+    number: '177',
+    dexNum: 479,
+    attacks: [
+      { name: 'Scrap Short', damage: '40+', text: 'Put any number of Pokémon Tool cards from your discard pile in the Lost Zone. This attack does 40 more damage for each card you put in the Lost Zone this way.' },
+      { name: 'Explosion Circuit', damage: '220', text: 'This Pokémon is now Confused.' }
+    ],
+    images: { small: 'https://images.pokemontcg.io/swsh11/177.png' },
+    value: 30.54, _marketPrice: 30.54, setId: 'swsh11',
+  };
+  [charizardSIR, charmanderIR, rotomV].forEach(c => { S.inventory.push(c); trackBest(c); });
+  save();
+  localStorage.setItem('pokepack_gifts_v2', '1');
+  toast('🎁 3 special cards added: Charizard ex SIR, Charmander IR & Rotom V!', 'secret');
+}
+
 // ════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════
@@ -2426,6 +2482,7 @@ loadPools();  // restore cached card pools from localStorage
   if (changed) save();
 }
 injectSpecialCards();
+injectSpecialCards_v2();
 renderShop();
 updateMoney();
 </script>
