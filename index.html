@@ -1171,6 +1171,8 @@ async function rebuyPack() {
   if (!S.lastPackId) return;
   const meta = SET_META.find(s=>s.id===S.lastPackId);
   if (!meta || S.money < meta.price) { toast('Not enough money!','err'); return; }
+  // Keep all cards from the current pack before opening the next one
+  S.pending.forEach(c=>{ S.inventory.push({...c}); trackBest(c); });
   document.getElementById('packModal').classList.remove('open');
   S.pending = [];
   await buyPack(S.lastPackId);
