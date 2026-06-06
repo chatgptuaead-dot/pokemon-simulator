@@ -982,12 +982,32 @@ function savePoolForSet(setId) {
   try { localStorage.setItem('pkpack_pool_' + setId, JSON.stringify(out)); savePriceMap(); } catch(e) {}
 }
 
+// Re-sorts cards in a cached pool into the correct tiers by rarity string.
+// Old caches used tierFromPrice() which put SIRs/HRs in ultra/holo — this fixes that.
+function retierPool(pool) {
+  const out = { _live: true };
+  for (const t of TIER_ORDER) out[t] = [];
+  for (const [tier, cards] of Object.entries(pool)) {
+    if (tier === '_live' || !Array.isArray(cards)) continue;
+    for (const c of cards) {
+      const correct = c.rarity ? getTier(c.rarity) : tier;
+      out[correct].push(c);
+    }
+  }
+  for (const t of TIER_ORDER) {
+    if (!out[t].length) out[t] = [...OFFLINE_POOL[t]||[]];
+  }
+  return out;
+}
+
 function loadPoolForSet(setId) {
   try {
     const d = localStorage.getItem('pkpack_pool_' + setId);
     if (!d) return false;
-    cardPools[setId] = JSON.parse(d);
-    fetchPricesInBackground(setId); // silently fill any missing prices
+    const raw = JSON.parse(d);
+    cardPools[setId] = retierPool(raw); // fix any stale tier assignments
+    savePoolForSet(setId);              // persist corrected pool
+    fetchPricesInBackground(setId);
     return true;
   } catch(e) { return false; }
 }
@@ -1072,7 +1092,7 @@ function migrateOldCache() {
     const saved = JSON.parse(d);
     for (const [setId, pool] of Object.entries(saved)) {
       if (cardPools[setId]) continue;
-      cardPools[setId] = { ...pool, _live: true };
+      cardPools[setId] = retierPool({ ...pool, _live: true });
       savePoolForSet(setId);
     }
     localStorage.removeItem('pkpack_pools_v11');
@@ -1138,7 +1158,8 @@ async function fetchPool(setId) {
       if (!c.images?.small) continue;
       const mp = extractMarketPrice(c);
       c._marketPrice = mp;
-      let tier = mp ? tierFromPrice(mp) : getTier(c.rarity);
+      // Rarity string is ground truth — price is only a fallback for cards with no rarity info
+      let tier = c.rarity ? getTier(c.rarity) : (mp ? tierFromPrice(mp) : 'common');
       const subs = c.subtypes || [];
       if (subs.some(s => s==='VSTAR' || s==='VMAX' || s==='TAG TEAM')) {
         if (TIER_ORDER.indexOf(tier) > TIER_ORDER.indexOf('ultra')) tier = 'ultra';
