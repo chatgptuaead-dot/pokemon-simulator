@@ -997,13 +997,12 @@ function retierPool(pool) {
   for (const [tier, cards] of Object.entries(pool)) {
     if (tier === '_live' || !Array.isArray(cards)) continue;
     for (const c of cards) {
+      if (c.emoji) continue; // skip offline fallback cards that leaked into real set pools
       const correct = c.rarity ? getTier(c.rarity) : tier;
       out[correct].push(c);
     }
   }
-  for (const t of TIER_ORDER) {
-    if (!out[t].length) out[t] = [...OFFLINE_POOL[t]||[]];
-  }
+  // Don't fill empty tiers — drawPack() steps down gracefully for missing tiers
   return out;
 }
 
@@ -1180,9 +1179,9 @@ async function fetchPool(setId) {
       }
       pools[tier].push(c);
     }
-    for (const t of TIER_ORDER) {
-      if (!pools[t].length) pools[t] = [...OFFLINE_POOL[t]||[]];
-    }
+    // Do NOT fill empty tiers with offline pool cards — that caused fictional cards
+    // (Mew ex, Charizard ex…) to bleed into real sets. drawPack() steps down tiers
+    // gracefully when a tier is empty.
     cardPools[setId] = { ...pools, _live: true };
     savePoolForSet(setId);
     repriceInventoryFromPool();
