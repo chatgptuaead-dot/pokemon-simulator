@@ -903,25 +903,14 @@ function estimateValue(card) {
   return parseFloat((base * mult).toFixed(2));
 }
 
-// Re-prices existing inventory cards using current pool market data.
-// Called after every successful pool fetch so old wrong prices get corrected.
-function repriceInventoryFromPool(setId) {
-  const pool = cardPools[setId];
-  if (!pool) return;
-  // Build id→marketPrice map from all tiers in this pool
-  const priceMap = {};
-  for (const tier of Object.values(pool)) {
-    if (!Array.isArray(tier)) continue;
-    for (const c of tier) {
-      if (c.id && c._marketPrice > 0) priceMap[c.id] = c._marketPrice;
-    }
-  }
+// Re-prices inventory from the global priceMap (updated whenever a pool is saved).
+function repriceInventoryFromPool() {
   if (!Object.keys(priceMap).length) return;
   let changed = false;
   for (const inv of S.inventory) {
     if (inv.id && priceMap[inv.id] !== undefined) {
-      inv.value = parseFloat(priceMap[inv.id].toFixed(2));
-      changed = true;
+      const v = parseFloat(priceMap[inv.id].toFixed(2));
+      if (inv.value !== v) { inv.value = v; changed = true; }
     }
   }
   if (changed) { save(); updateMoney(); }
@@ -930,53 +919,81 @@ function repriceInventoryFromPool(setId) {
 // ════════════════════════════════════════
 //  API  (with timeout + graceful fallback)
 // ════════════════════════════════════════
-// ── Pool cache (localStorage) ─────────────────────────────────────────────
-// v10: pokemontcg.io now primary source (has live TCGPlayer prices); GitHub has none
-const POOL_CACHE_KEY = 'pkpack_pools_v11';
+// ── Pool cache (per-set localStorage keys + lightweight price map) ────────
+// Each set stored separately: 'pkpack_pool_{setId}' (~50-200KB each)
+// Prices stored once: 'pkpack_prices_v1' (~40KB, loaded at startup only)
+// Old single-blob key 'pkpack_pools_v11' is migrated and removed on first load.
 
-function savePools() {
-  try {
-    const out = {};
-    for (const [k, v] of Object.entries(cardPools)) {
-      if (!v._live) continue; // skip offline-fallback pools
-      out[k] = {};
-      for (const [tier, cards] of Object.entries(v)) {
-        if (tier === '_live') continue;
-        out[k][tier] = cards.map(c => ({
-          id: c.id, name: c.name, hp: c.hp, rarity: c.rarity, number: c.number||'',
-          dexNum: (c.nationalPokedexNumbers||[])[0] || null,
-          attacks: (c.attacks||[]).map(a => ({ name: a.name, damage: a.damage, text: (a.text||'').slice(0,120) })),
-          images: { small: c.images?.small||'', large: c.images?.large||'' },
-          _marketPrice: c._marketPrice || null
-        }));
-      }
-    }
-    localStorage.setItem(POOL_CACHE_KEY, JSON.stringify(out));
-  } catch(e) {}
+const PRICE_MAP_KEY = 'pkpack_prices_v1';
+let priceMap = {};   // {cardId: marketPrice} — updated whenever a pool is saved
+
+function savePriceMap() {
+  try { localStorage.setItem(PRICE_MAP_KEY, JSON.stringify(priceMap)); } catch(e) {}
+}
+function loadPriceMap() {
+  try { const d = localStorage.getItem(PRICE_MAP_KEY); if (d) priceMap = JSON.parse(d); } catch(e) {}
 }
 
-function loadPools() {
+function compactCard(c) {
+  const out = {
+    id: c.id, name: c.name, hp: c.hp, rarity: c.rarity, number: c.number||'',
+    dexNum: c.dexNum || (c.nationalPokedexNumbers||[])[0] || null,
+    attacks: (c.attacks||[]).map(a => ({ name: a.name, damage: a.damage, text: (a.text||'').slice(0,120) })),
+    images: { small: c.images?.small||'', large: c.images?.large||'' },
+    _marketPrice: c._marketPrice || null,
+  };
+  if (c.emoji) out.emoji = c.emoji;
+  return out;
+}
+
+function savePoolForSet(setId) {
+  const pool = cardPools[setId];
+  if (!pool?._live) return;
+  const out = { _live: true };
+  for (const [tier, cards] of Object.entries(pool)) {
+    if (tier === '_live' || !Array.isArray(cards)) continue;
+    out[tier] = cards.map(compactCard);
+    for (const c of out[tier]) { if (c.id && c._marketPrice) priceMap[c.id] = c._marketPrice; }
+  }
+  try { localStorage.setItem('pkpack_pool_' + setId, JSON.stringify(out)); savePriceMap(); } catch(e) {}
+}
+
+function loadPoolForSet(setId) {
   try {
-    const d = localStorage.getItem(POOL_CACHE_KEY);
+    const d = localStorage.getItem('pkpack_pool_' + setId);
+    if (!d) return false;
+    cardPools[setId] = JSON.parse(d);
+    return true;
+  } catch(e) { return false; }
+}
+
+function migrateOldCache() {
+  try {
+    const d = localStorage.getItem('pkpack_pools_v11');
     if (!d) return;
     const saved = JSON.parse(d);
-    for (const [k, v] of Object.entries(saved)) {
-      if (!cardPools[k]) cardPools[k] = { ...v, _live: true };
+    for (const [setId, pool] of Object.entries(saved)) {
+      if (cardPools[setId]) continue;
+      cardPools[setId] = { ...pool, _live: true };
+      savePoolForSet(setId);
     }
+    localStorage.removeItem('pkpack_pools_v11');
   } catch(e) {}
 }
+
+// Only the fields we actually use — cuts API payload ~60%
+const API_FIELDS = 'id,name,images,attacks,hp,rarity,subtypes,nationalPokedexNumbers,number,tcgplayer,cardmarket';
 
 async function fetchPool(setId) {
   if (cardPools[setId]) return false;
+  // Check per-set localStorage cache before hitting the network
+  if (loadPoolForSet(setId)) return false;
 
   const setName = SET_META.find(s=>s.id===setId)?.name || setId;
   showLoad(`Loading ${setName}…`);
-
-  // pokemontcg.io first — has live TCGPlayer market prices embedded in every card.
-  // GitHub JSON is price-free (confirmed); only use as last resort for card images/data.
   let allCards = null;
 
-  // ── Source 1: pokemontcg.io with full pagination ──────────────────────
+  // ── Source 1: pokemontcg.io (has live TCGPlayer prices, field-selected for speed) ──
   try {
     const cards = [];
     let page = 1;
@@ -984,7 +1001,7 @@ async function fetchPool(setId) {
       abortCtrl = new AbortController();
       const timeout = setTimeout(() => abortCtrl.abort(), 15000);
       const r = await fetch(
-        `https://api.pokemontcg.io/v2/cards?q=set.id:${setId}&pageSize=250&page=${page}`,
+        `https://api.pokemontcg.io/v2/cards?q=set.id:${setId}&pageSize=250&page=${page}&select=${API_FIELDS}`,
         { signal: abortCtrl.signal }
       );
       clearTimeout(timeout); abortCtrl = null;
@@ -992,14 +1009,14 @@ async function fetchPool(setId) {
       const data = await r.json();
       const batch = data.data || [];
       cards.push(...batch);
-      if (batch.length < 250) break; // last page
+      if (batch.length < 250) break;
       page++;
       showLoad(`Loading ${setName}… (${cards.length} cards)`);
     }
     if (cards.length) allCards = cards;
   } catch(e) { abortCtrl = null; }
 
-  // ── Source 2: GitHub JSON (no prices, but good image/attack data) ─────
+  // ── Source 2: GitHub JSON backup (no prices) ──────────────────────────
   if (!allCards) {
     try {
       abortCtrl = new AbortController();
@@ -1018,7 +1035,7 @@ async function fetchPool(setId) {
   }
 
   if (allCards && allCards.length) {
-    const pools = { common:[],uncommon:[],rare:[],holo:[],ultra:[],secret:[] };
+    const pools = { common:[], uncommon:[], rare:[], holo:[], ultra:[], secret:[], hyper:[] };
     for (const c of allCards) {
       if (!c.images?.small) continue;
       const mp = extractMarketPrice(c);
@@ -1036,13 +1053,13 @@ async function fetchPool(setId) {
       if (!pools[t].length) pools[t] = [...OFFLINE_POOL[t]||[]];
     }
     cardPools[setId] = { ...pools, _live: true };
-    savePools();
-    repriceInventoryFromPool(setId);
+    savePoolForSet(setId);       // saves only this set, updates priceMap
+    repriceInventoryFromPool();  // reprice using updated priceMap
     hideLoad();
     return false;
   }
 
-  // All sources failed
+  // All sources failed — use offline pool
   cardPools[setId] = { ...OFFLINE_POOL };
   hideLoad();
   return true;
@@ -2614,25 +2631,21 @@ function injectSpecialCards_v2() {
 //  INIT
 // ════════════════════════════════════════
 load();
-loadPools();  // restore cached card pools from localStorage
-// Build one price map from all cached pools, reprice inventory once, save once
+loadPriceMap();   // fast: ~40KB price index only, not full pool data
+migrateOldCache(); // one-time: moves pkpack_pools_v11 → per-set keys, then deletes old blob
+// Patch inventory cards and reprice from price map — all synchronous and fast
 {
-  const pm = {};
-  for (const sid of Object.keys(cardPools)) {
-    const pool = cardPools[sid];
-    if (!pool) continue;
-    for (const tier of Object.values(pool)) {
-      if (!Array.isArray(tier)) continue;
-      for (const c of tier) if (c.id && c._marketPrice > 0) pm[c.id] = c._marketPrice;
-    }
-  }
-  const HP_BY_TIER = { secret:'220', ultra:'170', holo:'130', rare:'110', uncommon:'90', common:'70' };
+  const HP_BY_TIER = { hyper:'240', secret:'220', ultra:'170', holo:'130', rare:'110', uncommon:'90', common:'70' };
   let changed = false;
   for (const inv of S.inventory) {
-    if (inv.id && pm[inv.id] !== undefined) { inv.value = parseFloat(pm[inv.id].toFixed(2)); changed = true; }
-    // Fix offline-pool cards already in inventory that are missing hp/attacks/dexNum
+    // Reprice from cached price map
+    if (inv.id && priceMap[inv.id] !== undefined) {
+      const v = parseFloat(priceMap[inv.id].toFixed(2));
+      if (inv.value !== v) { inv.value = v; changed = true; }
+    }
+    // Fix offline-pool cards missing hp/attacks/dexNum
     if (inv.emoji) {
-      if (!inv.attacks || !inv.attacks.length) {
+      if (!inv.attacks?.length) {
         inv.hp = inv.hp || HP_BY_TIER[inv.tier] || '70';
         inv.attacks = [{ name:'Tackle', damage:'10', text:'' }];
         changed = true;
@@ -2644,7 +2657,7 @@ loadPools();  // restore cached card pools from localStorage
         }
       }
     }
-    // Fix API cards saved without dexNum (live-fetch cards had nationalPokedexNumbers not extracted)
+    // Fix API cards stored with nationalPokedexNumbers but no dexNum
     if (!inv.dexNum && inv.nationalPokedexNumbers?.length) {
       inv.dexNum = inv.nationalPokedexNumbers[0]; changed = true;
     }
