@@ -1082,6 +1082,11 @@ async function fetchPricesInBackground(setId) {
       if (el) el.textContent = fmt(total);
     }
     if (document.getElementById('collectionPage').classList.contains('active')) renderCollection();
+    // Refresh set viewer if it's open and showing this same set
+    if (document.getElementById('setViewModal').classList.contains('open') &&
+        document.getElementById('svSetName').textContent.includes(SET_META.find(s=>s.id===setId)?.name||setId)) {
+      renderSetView(setId);
+    }
   } catch(e) {}
 }
 
@@ -2642,17 +2647,14 @@ function renderSetView(setId) {
         <div class="sv-grid">
           ${cards.map(c => {
             const img = c.images?.small || '';
-            const isLive = c._marketPrice > 0;
             const val = estimateValue(c);
-            const valStr = isLive ? fmt(val) : `~${fmt(val)}`;
-            const valTitle = isLive ? 'TCGPlayer market price' : 'Estimated value';
             return `<div class="sv-card" style="border-color:${tc.color}66">
               ${img ? `<img src="${img}" alt="${c.name}" loading="lazy" onerror="this.style.display='none'">` : `<div style="aspect-ratio:0.715;background:${tc.color}18;display:flex;align-items:center;justify-content:center;font-size:1.4rem">${c.emoji||'🃏'}</div>`}
               <div class="sv-card-info">
                 <div class="sv-card-name">${c.name}</div>
                 <div class="sv-card-sub">
                   <span class="sv-card-odds">${fmtOdds(p)}</span>
-                  <span class="sv-card-val" title="${valTitle}" style="opacity:${isLive?1:0.65}">${valStr}</span>
+                  <span class="sv-card-val">${fmt(val)}</span>
                 </div>
               </div>
             </div>`;
