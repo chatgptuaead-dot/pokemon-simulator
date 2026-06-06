@@ -370,6 +370,23 @@
     .mp-status { font-size:.88rem; font-weight:700; color:#9090ff; margin-top:.5rem; }
     .mp-status.ok  { color:#3ddc5a; }
     .mp-status.err { color:#ff5555; }
+
+    /* ── Set Card Viewer ── */
+    #setViewModal { display:none; position:fixed; inset:0; z-index:650; background:rgba(0,0,0,.97); flex-direction:column; align-items:center; padding:0 1rem 2rem; overflow-y:auto; }
+    #setViewModal.open { display:flex; }
+    .sv-sticky-hdr { position:sticky; top:0; z-index:10; background:rgba(8,8,15,.97); width:100%; max-width:960px; padding:1rem 0 .7rem; border-bottom:1px solid var(--border); margin-bottom:1.2rem; display:flex; flex-direction:column; align-items:center; gap:.4rem; }
+    .sv-tier-block { width:100%; max-width:960px; margin-bottom:1.6rem; }
+    .sv-tier-lbl { font-size:.68rem; font-weight:900; text-transform:uppercase; letter-spacing:1.5px; padding:.3rem .8rem; border-radius:20px; display:inline-flex; align-items:center; gap:.5rem; margin-bottom:.65rem; }
+    .sv-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(95px,1fr)); gap:.55rem; }
+    .sv-card { border-radius:9px; overflow:hidden; border:2px solid; background:#0d0d1a; }
+    .sv-card img { width:100%; aspect-ratio:0.715; object-fit:cover; display:block; }
+    .sv-card-info { padding:.28rem .38rem; }
+    .sv-card-name { font-size:.56rem; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sv-card-sub { display:flex; justify-content:space-between; align-items:center; margin-top:.1rem; }
+    .sv-card-odds { font-size:.52rem; font-weight:700; color:var(--gold); }
+    .sv-card-val  { font-size:.52rem; font-weight:700; color:var(--muted); }
+    .view-cards-btn { font-family:'Nunito',sans-serif; font-weight:800; font-size:.78rem; background:rgba(255,255,255,.07); border:1px solid var(--border); color:var(--muted); border-radius:50px; padding:.4rem .9rem; cursor:pointer; transition:all .2s; }
+    .view-cards-btn:hover { border-color:rgba(255,255,255,.25); color:var(--text); }
   </style>
 </head>
 <body>
@@ -484,6 +501,15 @@
     <button class="m-btn m-sell"    onclick="sellAllPack()">💰 Sell All (<span id="packTotalEl">$0</span>)</button>
     <button class="m-btn" id="rebuyBtn" style="background:#1a3a1a;color:#4ddd4d;display:none" onclick="rebuyPack()">🔁 Open Another</button>
   </div>
+</div>
+
+<div id="setViewModal">
+  <div class="sv-sticky-hdr">
+    <div class="modal-set-name" id="svSetName">Set Cards</div>
+    <div id="svSubtitle" style="color:var(--muted);font-size:.76rem"></div>
+    <button class="load-cancel" onclick="closeSetView()">✕ Close</button>
+  </div>
+  <div id="svContent" style="width:100%;max-width:960px"></div>
 </div>
 
 <div id="loadOverlay">
@@ -1006,6 +1032,10 @@ function drawPack(setId) {
 
   const OFFLINE_HP = { secret:'220', ultra:'170', holo:'130', rare:'110', uncommon:'90', common:'70' };
   function addOfflineDefaults(card, t) {
+    // Normalize dexNum from raw API field (live fetch) if not already set
+    if (!card.dexNum && card.nationalPokedexNumbers?.length) {
+      card.dexNum = card.nationalPokedexNumbers[0];
+    }
     // Offline pool cards (identified by emoji field) have no hp/attacks — add defaults
     if (card.emoji && (!card.attacks || !card.attacks.length)) {
       card.hp = card.hp || OFFLINE_HP[t] || '70';
@@ -1149,6 +1179,7 @@ function renderShop() {
             </div>
             <div class="pack-footer">
               <div class="pack-price">${fmt(s.price)}</div>
+              <button class="view-cards-btn" onclick="viewSetCards('${s.id}')">👁 Cards</button>
               <button class="buy-btn" ${S.money<s.price?'disabled':''} onclick="buyPack('${s.id}')">
                 ${S.money<s.price?'💸 Can\'t Afford':'🎴 Buy Pack'}
               </button>
@@ -1319,7 +1350,7 @@ function renderCollection() {
     return true;
   });
 
-  function dexNum(c) { return c.dexNum || 9999; }
+  function dexNum(c) { return c.dexNum || (c.nationalPokedexNumbers||[])[0] || 9999; }
   if (sort==='rarity')    cards.sort((a,b)=>TIER_ORDER.indexOf(a.tier)-TIER_ORDER.indexOf(b.tier)||b.value-a.value);
   else if (sort==='value-hi') cards.sort((a,b)=>b.value-a.value);
   else if (sort==='value-lo') cards.sort((a,b)=>a.value-b.value);
@@ -2388,6 +2419,89 @@ function startMpBattle() {
 }
 
 // ════════════════════════════════════════
+//  SET CARD VIEWER
+// ════════════════════════════════════════
+async function viewSetCards(setId) {
+  document.getElementById('setViewModal').classList.add('open');
+  const meta = SET_META.find(s => s.id === setId);
+  document.getElementById('svSetName').textContent = '🎴 ' + (meta?.name || setId);
+  document.getElementById('svSubtitle').textContent = '';
+  document.getElementById('svContent').innerHTML =
+    '<div style="color:var(--muted);text-align:center;padding:3rem">Loading cards…</div>';
+  await fetchPool(setId);
+  renderSetView(setId);
+}
+
+function closeSetView() {
+  document.getElementById('setViewModal').classList.remove('open');
+}
+
+function renderSetView(setId) {
+  const pool = cardPools[setId];
+  const meta = SET_META.find(s => s.id === setId);
+  if (!pool) { document.getElementById('svContent').innerHTML = '<div style="color:var(--muted);text-align:center;padding:3rem">Could not load cards.</div>'; return; }
+
+  // Per-card pull odds
+  const baseW = SET_WEIGHTS[setId] || ERA_WEIGHTS[meta?.series] || RARE_WEIGHTS;
+  const availW = {}, tierCounts = {};
+  let totalW = 0;
+  for (const [t, w] of Object.entries(baseW)) {
+    tierCounts[t] = (pool[t]||[]).length;
+    if (tierCounts[t]) { availW[t] = w; totalW += w; }
+  }
+  const nc = Math.max(tierCounts.common  || 0, 1);
+  const nu = Math.max(tierCounts.uncommon|| 0, 1);
+  function cardOdds(tier) {
+    if (tier === 'common')   return (1 - Math.pow(1 - 1/nc, 6)) * 100;
+    if (tier === 'uncommon') return (1 - Math.pow(1 - 1/nu, 3)) * 100;
+    const n = Math.max(tierCounts[tier] || 0, 1);
+    return ((availW[tier]||0) / totalW) / n * 100;
+  }
+  function fmtOdds(p) {
+    if (p >= 1)    return p.toFixed(1) + '%';
+    if (p >= 0.1)  return p.toFixed(2) + '%';
+    if (p >= 0.01) return p.toFixed(3) + '%';
+    return '<0.01%';
+  }
+
+  const RARITY_ORDER = ['common','uncommon','rare','holo','ultra','secret'];
+  let totalCards = 0;
+  let html = '';
+  for (const tier of RARITY_ORDER) {
+    const cards = pool[tier] || [];
+    if (!cards.length) continue;
+    totalCards += cards.length;
+    const tc = TIER[tier];
+    const p = cardOdds(tier);
+    html += `
+      <div class="sv-tier-block">
+        <div class="sv-tier-lbl" style="background:${tc.color}1a;color:${tc.color};border:1px solid ${tc.color}44">
+          ${tc.label} &nbsp;·&nbsp; ${cards.length} cards &nbsp;·&nbsp; ${fmtOdds(p)} / card / pack
+        </div>
+        <div class="sv-grid">
+          ${cards.map(c => {
+            const img = c.images?.small || '';
+            const val = c._marketPrice ? fmt(c._marketPrice) : '';
+            return `<div class="sv-card" style="border-color:${tc.color}66">
+              ${img ? `<img src="${img}" alt="${c.name}" loading="lazy" onerror="this.style.display='none'">` : `<div style="aspect-ratio:0.715;background:${tc.color}18;display:flex;align-items:center;justify-content:center;font-size:1.4rem">${c.emoji||'🃏'}</div>`}
+              <div class="sv-card-info">
+                <div class="sv-card-name">${c.name}</div>
+                <div class="sv-card-sub">
+                  <span class="sv-card-odds">${fmtOdds(p)}</span>
+                  ${val ? `<span class="sv-card-val">${val}</span>` : ''}
+                </div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }
+
+  document.getElementById('svSubtitle').textContent = `${totalCards} cards · sorted by rarity`;
+  document.getElementById('svContent').innerHTML = html;
+}
+
+// ════════════════════════════════════════
 //  SPECIAL CARD INJECTION
 // ════════════════════════════════════════
 function injectSpecialCards() {
@@ -2506,6 +2620,10 @@ loadPools();  // restore cached card pools from localStorage
           if (found?.dexNum) { inv.dexNum = found.dexNum; changed = true; break; }
         }
       }
+    }
+    // Fix API cards saved without dexNum (live-fetch cards had nationalPokedexNumbers not extracted)
+    if (!inv.dexNum && inv.nationalPokedexNumbers?.length) {
+      inv.dexNum = inv.nationalPokedexNumbers[0]; changed = true;
     }
   }
   if (changed) save();
