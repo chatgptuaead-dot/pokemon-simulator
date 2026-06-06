@@ -660,7 +660,7 @@ function tcgImg(dexNum) {
 }
 
 function offlineCard(name, emoji, rarity, dexNum) {
-  return { name, emoji, rarity, images:{ small: tcgImg(dexNum) } };
+  return { name, emoji, rarity, dexNum, images:{ small: tcgImg(dexNum) } };
 }
 
 const OFFLINE_POOL = {
@@ -2493,11 +2493,19 @@ loadPools();  // restore cached card pools from localStorage
   let changed = false;
   for (const inv of S.inventory) {
     if (inv.id && pm[inv.id] !== undefined) { inv.value = parseFloat(pm[inv.id].toFixed(2)); changed = true; }
-    // Fix offline-pool cards already in inventory that are missing hp/attacks
-    if (inv.emoji && (!inv.attacks || !inv.attacks.length)) {
-      inv.hp = inv.hp || HP_BY_TIER[inv.tier] || '70';
-      inv.attacks = [{ name:'Tackle', damage:'10', text:'' }];
-      changed = true;
+    // Fix offline-pool cards already in inventory that are missing hp/attacks/dexNum
+    if (inv.emoji) {
+      if (!inv.attacks || !inv.attacks.length) {
+        inv.hp = inv.hp || HP_BY_TIER[inv.tier] || '70';
+        inv.attacks = [{ name:'Tackle', damage:'10', text:'' }];
+        changed = true;
+      }
+      if (!inv.dexNum) {
+        for (const tier of Object.values(OFFLINE_POOL)) {
+          const found = tier.find(c => c.name === inv.name);
+          if (found?.dexNum) { inv.dexNum = found.dexNum; changed = true; break; }
+        }
+      }
     }
   }
   if (changed) save();
