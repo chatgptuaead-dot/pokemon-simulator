@@ -123,6 +123,8 @@
     .flip-slot.tier-holo     .flip-front { border-color:#c060ff; box-shadow:0 0 14px rgba(180,60,255,.6); }
     .flip-slot.tier-ultra    .flip-front { border-color:#ff8800; box-shadow:0 0 14px rgba(255,136,0,.6); }
     .flip-slot.tier-secret   .flip-front { animation:rainbowBorder 2s linear infinite; }
+    .flip-slot.tier-hyper    .flip-front { border-color:#FFD700; box-shadow:0 0 20px rgba(255,215,0,.9); animation:goldPulse 1.5s ease-in-out infinite; }
+    @keyframes goldPulse { 0%,100%{box-shadow:0 0 16px rgba(255,215,0,.7)} 50%{box-shadow:0 0 28px rgba(255,215,0,1),0 0 40px rgba(255,180,0,.5)} }
     @keyframes rainbowBorder {
       0%{border-color:#f00;box-shadow:0 0 18px #f00} 17%{border-color:#f70;box-shadow:0 0 18px #f70}
       33%{border-color:#fe0;box-shadow:0 0 18px #fe0} 50%{border-color:#0c0;box-shadow:0 0 18px #0c0}
@@ -194,6 +196,7 @@
     .inv-card.tier-holo     { border-color:#c060ff; box-shadow:0 0 8px rgba(180,60,255,.25); }
     .inv-card.tier-ultra    { border-color:#ff8800; box-shadow:0 0 8px rgba(255,136,0,.25); }
     .inv-card.tier-secret   { animation:rainbowBorder 2s linear infinite; }
+    .inv-card.tier-hyper    { border-color:#FFD700; box-shadow:0 0 10px rgba(255,215,0,.6); animation:goldPulse 1.5s ease-in-out infinite; }
 
     /* ── Stats ── */
     .stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px,1fr)); gap:1.1rem; }
@@ -261,6 +264,7 @@
     #toast.t-holo   { border-color:#c060ff; background:#1a0535; }
     #toast.t-ultra  { border-color:#ff8800; background:#1e0e00; }
     #toast.t-secret { border-color:#ff3333; background:#1a0000; animation:rainbowBorder 2s linear infinite; }
+    #toast.t-hyper  { border-color:#FFD700; background:#1a1500; animation:goldPulse 1.5s ease-in-out infinite; }
 
     /* ── Sparkles ── */
     .spark { position:fixed; pointer-events:none; z-index:700; font-size:1.4rem; animation:sparkFly 1.1s ease-out forwards; }
@@ -604,20 +608,21 @@ const RARITY_TO_TIER = {
   'Common':'common','Uncommon':'uncommon','Promo':'uncommon','Black Star Promo':'uncommon',
   // Rare
   'Rare':'rare','Rare Holo':'holo','Radiant Rare':'holo',
-  // SV era — Double Rare = ex holo, Ultra Rare = full-art ex/supporters
-  'Double Rare':'ultra','Ultra Rare':'ultra',
-  // Shiny rares (Paldean Fates, Stellar Crown)
+  // SV era
+  'Double Rare':'ultra','Ultra Rare':'ultra','Illustration Rare':'ultra',
   'Shiny Rare':'holo','Shiny Ultra Rare':'ultra',
-  // Legacy ultra
-  'ACE SPEC Rare':'ultra','Illustration Rare':'ultra','Amazing Rare':'ultra',
+  // Legacy ultra — EX/GX/V
+  'ACE SPEC Rare':'ultra','Amazing Rare':'ultra',
   'Rare Ultra':'ultra','Rare Holo EX':'ultra','Rare Holo GX':'ultra',
   'Rare Holo V':'ultra','Rare Holo VMAX':'ultra','Rare Holo VSTAR':'ultra',
   'Trainer Gallery Rare Holo':'ultra','Classic Collection':'ultra',
   'Rare Shining':'holo','Rare Prime':'holo',
-  // Secret
-  'Special Illustration Rare':'secret','Hyper Rare':'secret',
+  // Secret (SIR, Rainbow Rares, alt arts, shiny GX)
+  'Special Illustration Rare':'secret',
   'Rare Secret':'secret','Rare Rainbow':'secret',
   'Rare Shiny V':'secret','Rare Shiny GX':'secret','LEGEND':'secret',
+  // Hyper Rare — gold cards (SV era), rarest pull
+  'Hyper Rare':'hyper',
 };
 
 // Keyword fallback for rarity strings not in the mapping
@@ -625,44 +630,61 @@ function getTier(rarity) {
   if (!rarity) return 'common';
   if (RARITY_TO_TIER[rarity]) return RARITY_TO_TIER[rarity];
   const r = rarity.toLowerCase();
-  if (r.includes('secret') || r.includes('rainbow') || r.includes('hyper')) return 'secret';
-  if (r.includes('ultra') || r.includes('illustration') || r.includes('full art') || r.includes('gold')) return 'ultra';
+  if (r.includes('hyper')) return 'hyper';
+  if (r.includes('secret') || r.includes('rainbow')) return 'secret';
+  if (r.includes('ultra') || r.includes('illustration') || r.includes('full art')) return 'ultra';
+  if (r.includes('gold')) return 'hyper';
   if (r.includes('holo') || r.includes('shiny') || r.includes('radiant') || r.includes('prime')) return 'holo';
   if (r.includes('rare')) return 'rare';
   if (r.includes('uncommon') || r.includes('promo')) return 'uncommon';
   return 'common';
 }
 const TIER = {
-  common:   { label:'Common',     color:'#999',    valueRange:[0.05, 0.30]  },
-  uncommon: { label:'Uncommon',   color:'#3ddc5a', valueRange:[0.20, 1.20]  },
-  rare:     { label:'Rare',       color:'#4a8fe8', valueRange:[0.50, 4.00]  },
-  holo:     { label:'Holo Rare',  color:'#c060ff', valueRange:[0.75,  6.00] }, // XY/SM holos: $0.75-3; newer: $2-6
-  ultra:    { label:'Ultra Rare', color:'#ff8800', valueRange:[0.75,  8.00] }, // EX/GX/V/DR: most $1-4, premium $5-8
-  secret:   { label:'Secret Rare',color:'#ff3333', valueRange:[6.00, 40.00] }, // XY HR: $5-20; SM rainbow: $5-25; SV SIR: $10-40+
+  common:   { label:'Common',      color:'#999',    valueRange:[0.05,  0.30]  },
+  uncommon: { label:'Uncommon',    color:'#3ddc5a', valueRange:[0.20,  1.20]  },
+  rare:     { label:'Rare',        color:'#4a8fe8', valueRange:[0.50,  4.00]  },
+  holo:     { label:'Holo Rare',   color:'#c060ff', valueRange:[0.75,  6.00]  },
+  ultra:    { label:'Ultra Rare',  color:'#ff8800', valueRange:[1.00, 12.00]  }, // EX/GX/V/DR/UR: $1-8, premium $8-12
+  secret:   { label:'Secret Rare', color:'#ff3333', valueRange:[8.00, 50.00]  }, // SIR/Rainbow/AltArt: $8-50
+  hyper:    { label:'Hyper Rare',  color:'#FFD700', valueRange:[25.00,200.00] }, // Gold cards: $25-200+
 };
-const TIER_ORDER = ['secret','ultra','holo','rare','uncommon','common'];
-// Global fallback weights (unused when ERA_WEIGHTS matches)
-const RARE_WEIGHTS = { rare:.53, holo:.22, ultra:.20, secret:.05 };
+// TIER_ORDER: highest rarity first (used for index comparisons — lower index = rarer)
+const TIER_ORDER = ['hyper','secret','ultra','holo','rare','uncommon','common'];
 
-// Per-era weights sourced from TCGPlayer pull rate articles and community data
-// XY: EX ~1:12, Secret ~1:45 | SM: GX ~1:6, Rainbow ~1:35 | SWSH: V ~1:3, Rainbow ~1:25
-// SV: DR ~1:3-5, SIR ~1:20-25, HR ~1:60+ | ME: DR ~20%, UR ~8%, SIR ~1%, HR ~1%
+// Global fallback weights
+const RARE_WEIGHTS = { rare:.52, holo:.23, ultra:.18, secret:.05, hyper:.02 };
+
+// Per-era pull rate weights — sourced from TCGPlayer/DigitalTQ/community data (1000+ pack samples)
+// Weights are relative probabilities for the single rare+ slot per pack.
+// XY:   EX ~1 in 6 packs total (~25% combined std+FA), Secret ~1 in 72 (~1.4%)
+// SM:   GX ~1 in 9 packs (~11%), FA GX ~1 in 18 (~5.5%), Rainbow ~1 in 200 (~0.5%)
+// SWSH: V ~1 in 9 (~11%), Rainbow <1 in 200, Alt Art ~1 in 100, Gold ~1 in 125
+// SV:   DR ~1 in 7 (~14%), UR ~1 in 15 (~7%), IR ~1 in 13 (~7%), SIR ~1 in 30 (~3.5%), HR ~1 in 54 (~1.8%)
 const ERA_WEIGHTS = {
-  'Mega Evolution': { rare:.50, holo:.17, ultra:.28, secret:.05 },
-  'Scarlet & Violet':{ rare:.50, holo:.22, ultra:.22, secret:.06 },
-  'Sword & Shield':  { rare:.48, holo:.22, ultra:.22, secret:.08 },
-  'Sun & Moon':      { rare:.55, holo:.26, ultra:.15, secret:.04 },
-  'XY':              { rare:.70, holo:.20, ultra:.08, secret:.02 },
+  'Mega Evolution': { rare:.44, holo:.18, ultra:.28, secret:.07, hyper:.03 },
+  'Scarlet & Violet':{ rare:.40, holo:.22, ultra:.24, secret:.09, hyper:.05 },
+  'Sword & Shield':  { rare:.44, holo:.24, ultra:.22, secret:.07, hyper:.03 },
+  'Sun & Moon':      { rare:.49, holo:.26, ultra:.17, secret:.06, hyper:.02 },
+  'XY':              { rare:.52, holo:.22, ultra:.22, secret:.04, hyper:.00 },
 };
 
-// Premium/special sets with elevated secret/holo pull rates
+// Per-set overrides for sets with confirmed or notably different pull rates
 const SET_WEIGHTS = {
-  'sv8pt5':  { rare:.42, holo:.23, ultra:.22, secret:.13 }, // Prismatic Evolutions — 2× SIR rate (confirmed)
-  'sv4pt5':  { rare:.45, holo:.25, ultra:.20, secret:.10 }, // Paldean Fates — shiny-focused set
-  'sv3pt5':  { rare:.48, holo:.24, ultra:.20, secret:.08 }, // Pokémon 151
-  'swsh4pt5':{ rare:.40, holo:.28, ultra:.22, secret:.10 }, // Shining Fates — shiny VMAX focus
-  'sm115':   { rare:.45, holo:.26, ultra:.19, secret:.10 }, // Hidden Fates — shiny GX set
-  'sm35':    { rare:.50, holo:.28, ultra:.16, secret:.06 }, // Shining Legends — shining Pokémon
+  // SV special sets
+  'sv8pt5':  { rare:.35, holo:.22, ultra:.24, secret:.13, hyper:.06 }, // Prismatic Evolutions: SIR 1:45 (2.2%), HR 1:180 (0.5%)
+  'sv5':     { rare:.46, holo:.24, ultra:.18, secret:.08, hyper:.04 }, // Temporal Forces: hardest SV — SIR 1:86, HR 1:139
+  'sv4pt5':  { rare:.37, holo:.22, ultra:.22, secret:.13, hyper:.06 }, // Paldean Fates: SIR 1:58, two hit slots
+  'sv3pt5':  { rare:.40, holo:.22, ultra:.22, secret:.11, hyper:.05 }, // Pokémon 151: SIR 1:32, HR 1:51
+  'sv9':     { rare:.38, holo:.21, ultra:.25, secret:.11, hyper:.05 }, // Journey Together: DR 1:5, better rates
+  // SWSH special sets
+  'swsh12pt5':{ rare:.38, holo:.22, ultra:.24, secret:.11, hyper:.05 }, // Crown Zenith: most generous SWSH
+  'swsh7':    { rare:.41, holo:.22, ultra:.22, secret:.10, hyper:.05 }, // Evolving Skies: alt arts
+  'swsh4pt5': { rare:.36, holo:.28, ultra:.22, secret:.10, hyper:.04 }, // Shining Fates: Shiny VMAX 1:12
+  // SM special sets
+  'sm115':   { rare:.40, holo:.26, ultra:.22, secret:.09, hyper:.03 }, // Hidden Fates: guaranteed GX/pack
+  'sm35':    { rare:.46, holo:.30, ultra:.18, secret:.06, hyper:.00 }, // Shining Legends
+  // XY special
+  'xy12':    { rare:.38, holo:.20, ultra:.28, secret:.14, hyper:.00 }, // Evolutions: very high secret rate
 };
 // Multipliers only used for fallback estimates (no market price). Keep small — real prices already handle popularity.
 const HOT_MONS = {
@@ -793,6 +815,12 @@ const OFFLINE_POOL = {
     offlineCard('Moltres ✦',    '🌈🔥', 'Special Illustration Rare', 146),
     offlineCard('Dragonite ✦',  '🌈🐉', 'Special Illustration Rare', 149),
   ],
+  hyper: [
+    offlineCard('Charizard ★',  '🥇🐉', 'Hyper Rare',   6),
+    offlineCard('Mewtwo ★',     '🥇🔮', 'Hyper Rare', 150),
+    offlineCard('Mew ★',        '🥇🌟', 'Hyper Rare', 151),
+    offlineCard('Rayquaza ★',   '🥇🐉', 'Hyper Rare', 384),
+  ],
 };
 
 // ════════════════════════════════════════
@@ -856,7 +884,8 @@ function tierFromPrice(price) {
   if (price <  6.00) return 'rare';
   if (price < 25.00) return 'holo';
   if (price < 70.00) return 'ultra';
-  return 'secret';
+  if (price < 130.00) return 'secret';
+  return 'hyper';
 }
 
 function estimateValue(card) {
@@ -1169,18 +1198,10 @@ function renderShop() {
             <div class="pack-series">${s.series}</div>
             <div class="pack-name">${s.name}</div>
             <div class="pack-desc">${s.desc}</div>
-            <div class="pack-odds">
-              <span class="odds-pip" style="color:#999">Common 60%</span>
-              <span class="odds-pip" style="color:#3ddc5a">Uncommon 30%</span>
-              <span class="odds-pip" style="color:#4a8fe8">Rare 8.4%</span>
-              <span class="odds-pip" style="color:#c060ff">Holo 6%</span>
-              <span class="odds-pip" style="color:#ff8800">Ultra 4%</span>
-              <span class="odds-pip" style="color:#ff3333">Secret 1.6%</span>
-            </div>
+            <button class="view-cards-btn" style="width:100%;margin-bottom:.8rem;padding:.5rem;font-size:.8rem" onclick="viewSetCards('${s.id}')">👁 View Cards &amp; Pull Rates</button>
             <div class="pack-footer">
               <div class="pack-price">${fmt(s.price)}</div>
-              <button class="view-cards-btn" onclick="viewSetCards('${s.id}')">👁 Cards</button>
-              <button class="buy-btn" ${S.money<s.price?'disabled':''} onclick="buyPack('${s.id}')">
+              <button class="buy-btn" style="flex:1;font-size:1rem;padding:.65rem 1rem" ${S.money<s.price?'disabled':''} onclick="buyPack('${s.id}')">
                 ${S.money<s.price?'💸 Can\'t Afford':'🎴 Buy Pack'}
               </button>
             </div>
@@ -1280,7 +1301,9 @@ function flipCard(i) {
   const rect = slot.getBoundingClientRect();
   const cx = rect.left+rect.width/2, cy = rect.top+rect.height/2;
 
-  if (card.tier==='secret') {
+  if (card.tier==='hyper') {
+    setTimeout(()=>{ sparkles(cx,cy,18); toast(`✨ HYPER RARE! ${card.name} — ${fmt(card.value)}!`,'hyper'); },600);
+  } else if (card.tier==='secret') {
     setTimeout(()=>{ sparkles(cx,cy,14); toast(`🌈 SECRET RARE! ${card.name} — ${fmt(card.value)}!`,'secret'); },600);
   } else if (card.tier==='ultra') {
     setTimeout(()=>{ sparkles(cx,cy,10); toast(`⚡ ULTRA RARE! ${card.name} — ${fmt(card.value)}`,'ultra'); },600);
