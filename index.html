@@ -446,6 +446,7 @@
       <option value="holo">Holo</option>
       <option value="ultra">Ultra Rare</option>
       <option value="secret">Secret Rare</option>
+      <option value="hyper">Hyper Rare</option>
     </select>
     <select class="coll-sel" id="sortSel" onchange="renderCollection()">
       <option value="rarity">Sort: Rarity</option>
@@ -862,7 +863,7 @@ let S = {
   pending:[], revealed:0,
   battlePoints: 0,
   stats:{ packsOpened:0, spent:0, earned:0,
-          found:{common:0,uncommon:0,rare:0,holo:0,ultra:0,secret:0},
+          found:{common:0,uncommon:0,rare:0,holo:0,ultra:0,secret:0,hyper:0},
           bestPull:null }
 };
 let cardPools = {};
@@ -871,7 +872,16 @@ let abortCtrl = null;
 let usedOffline = false;
 
 function save() { try{ localStorage.setItem('pokepack_v4',JSON.stringify(S)); }catch(e){} }
-function load() { try{ const d=localStorage.getItem('pokepack_v4'); if(d) S=JSON.parse(d); }catch(e){} }
+function load() {
+  try{ const d=localStorage.getItem('pokepack_v4'); if(d) S=JSON.parse(d); }catch(e){}
+  // Guard against corrupted or partial save data
+  if (typeof S.money !== 'number' || !isFinite(S.money)) S.money = 50;
+  if (!Array.isArray(S.inventory)) S.inventory = [];
+  if (!Array.isArray(S.pending))   S.pending   = [];
+  if (typeof S.nextId !== 'number') S.nextId = 0;
+  if (!S.stats || typeof S.stats !== 'object') S.stats = { packsOpened:0, spent:0, earned:0, found:{}, bestPull:null };
+  S.stats.found = S.stats.found || {};
+}
 
 // ════════════════════════════════════════
 //  UTILS
@@ -1780,8 +1790,10 @@ function nextLive(team, skip) {
   return null;
 }
 function mkBattleCard(c) {
-  const max = parseInt(c.hp) || 60;
-  return { ...c, _maxHp: max, _hp: max, _fainted: false };
+  const max = Math.max(10, parseInt(c.hp) || 60);
+  const card = { ...c, _maxHp: max, _hp: max, _fainted: false };
+  if (!Array.isArray(card.attacks)) card.attacks = [];
+  return card;
 }
 function getEligibleCards() {
   return S.inventory.filter(c => c.attacks && c.attacks.length > 0);
@@ -1837,6 +1849,8 @@ function renderBattleTeamSelect() {
     </div>`;
 
   const eligible = getEligibleCards();
+  // Remove stale UIDs from battleTeam (cards that were sold or no longer eligible)
+  battleTeam = battleTeam.filter(uid => eligible.some(c => c.uid === uid));
   const sel = battleTeam.map(uid => eligible.find(c => c.uid === uid)).filter(Boolean);
 
   function slotHTML(c) {
@@ -2043,7 +2057,7 @@ function buildOpponentTeam() {
     for (const tier of Object.values(pools)) {
       if (!Array.isArray(tier)) continue;
       for (const c of tier) {
-        if (c.attacks && c.attacks.length > 0 && !c.isOffline) all.push(c);
+        if (c.attacks && c.attacks.length > 0 && !c.emoji) all.push(c);
       }
     }
   }
@@ -2062,15 +2076,15 @@ function botName(level) {
 
 function buildBotTeam(level) {
   // Tier priority: fill all 3 slots from the primary tier first, overflow down
-  const tierPriority = level <= 5  ? ['common','uncommon','rare','holo','ultra','secret']
-    : level <= 12 ? ['uncommon','rare','common','holo','ultra','secret']
-    : level <= 18 ? ['rare','holo','uncommon','ultra','common','secret']
-    : level <= 24 ? ['holo','ultra','rare','secret','uncommon','common']
-    : level <= 29 ? ['ultra','secret','holo','rare','uncommon','common']
-    :               ['secret','ultra','holo','rare','uncommon','common'];
+  const tierPriority = level <= 5  ? ['common','uncommon','rare','holo','ultra','secret','hyper']
+    : level <= 12 ? ['uncommon','rare','common','holo','ultra','secret','hyper']
+    : level <= 18 ? ['rare','holo','uncommon','ultra','common','secret','hyper']
+    : level <= 24 ? ['holo','ultra','rare','secret','hyper','uncommon','common']
+    : level <= 29 ? ['ultra','secret','hyper','holo','rare','uncommon','common']
+    :               ['hyper','secret','ultra','holo','rare','uncommon','common'];
 
   // Collect live cards by tier
-  const byTier = { common:[], uncommon:[], rare:[], holo:[], ultra:[], secret:[] };
+  const byTier = { common:[], uncommon:[], rare:[], holo:[], ultra:[], secret:[], hyper:[] };
   for (const pools of Object.values(cardPools)) {
     for (const [tierName, tierCards] of Object.entries(pools)) {
       if (!Array.isArray(tierCards) || !byTier[tierName]) continue;
@@ -2220,7 +2234,7 @@ function renderBattleField() {
       ` : `
         <div class="battle-actions-title">⚡ ${pa.name}'s Attacks</div>
         <div class="attack-btns">
-          ${pa.attacks.map((a,i)=>{
+          ${(pa.attacks||[]).map((a,i)=>{
             const dmg = parseDmg(a.damage);
             const eff = simplifyEffect(a.text);
             return `<button class="attack-btn" onclick="playerAttack(${i})">
@@ -2570,7 +2584,7 @@ function startMpBattle() {
   const eligible = getEligibleCards();
   const playerCards = battleTeam.map(uid=>eligible.find(c=>c.uid===uid)).filter(Boolean);
   if (playerCards.length !== 3 || !mpTheirTeam) return;
-  const oppCards = mpTheirTeam.map(c => mkBattleCard(c));
+  const oppCards = mpTheirTeam.map(c => mkBattleCard({ ...c, attacks: c.attacks || [] }));
   BS = {
     player:           playerCards.map(mkBattleCard),
     opponent:         oppCards,
