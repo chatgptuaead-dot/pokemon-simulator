@@ -739,119 +739,122 @@ function tcgImg(dexNum) {
   return `https://images.pokemontcg.io/sv3pt5/${dexNum}.png`;
 }
 
-function offlineCard(name, emoji, rarity, dexNum) {
-  return { name, emoji, rarity, dexNum, images:{ small: tcgImg(dexNum) } };
+function offlineCard(name, emoji, rarity, dexNum, marketPrice) {
+  const card = { name, emoji, rarity, dexNum, id: 'sv3pt5-' + dexNum, images:{ small: tcgImg(dexNum) } };
+  if (marketPrice != null) card._marketPrice = marketPrice;
+  return card;
 }
 
 const OFFLINE_POOL = {
+  // Prices from TCGPlayer market data (sv3pt5 / Pokémon 151 set, June 2026)
   common: [
-    offlineCard('Bulbasaur',  '🌿', 'Common',   1),
-    offlineCard('Ivysaur',    '🌿', 'Common',   2),
-    offlineCard('Charmander', '🔥', 'Common',   4),
-    offlineCard('Charmeleon', '🔥', 'Common',   5),
-    offlineCard('Squirtle',   '💧', 'Common',   7),
-    offlineCard('Wartortle',  '💧', 'Common',   8),
-    offlineCard('Caterpie',   '🐛', 'Common',  10),
-    offlineCard('Metapod',    '🐛', 'Common',  11),
-    offlineCard('Pidgey',     '🐦', 'Common',  16),
-    offlineCard('Pidgeotto',  '🐦', 'Common',  17),
-    offlineCard('Rattata',    '🐭', 'Common',  19),
-    offlineCard('Ekans',      '🐍', 'Common',  23),
-    offlineCard('Sandshrew',  '🏔', 'Common',  27),
-    offlineCard('Clefairy',   '⭐', 'Common',  35),
-    offlineCard('Vulpix',     '🦊', 'Common',  37),
-    offlineCard('Jigglypuff', '🎵', 'Common',  39),
-    offlineCard('Oddish',     '🌿', 'Common',  43),
-    offlineCard('Paras',      '🍄', 'Common',  46),
-    offlineCard('Meowth',     '🐱', 'Common',  52),
-    offlineCard('Psyduck',    '💧', 'Common',  54),
-    offlineCard('Mankey',     '🐒', 'Common',  56),
-    offlineCard('Growlithe',  '🔥', 'Common',  58),
-    offlineCard('Poliwag',    '💧', 'Common',  60),
-    offlineCard('Abra',       '🔮', 'Common',  63),
-    offlineCard('Machop',     '💪', 'Common',  66),
-    offlineCard('Bellsprout', '🌱', 'Common',  69),
-    offlineCard('Tentacool',  '🪼', 'Common',  72),
-    offlineCard('Geodude',    '🪨', 'Common',  74),
-    offlineCard('Ponyta',     '🐴', 'Common',  77),
-    offlineCard('Slowpoke',   '🌀', 'Common',  79),
-    offlineCard('Magikarp',   '🐟', 'Common', 129),
-    offlineCard('Eevee',      '🦊', 'Common', 133),
-    offlineCard('Dratini',    '🐲', 'Common', 147),
+    offlineCard('Bulbasaur',  '🌿', 'Common',   1, 0.21),
+    offlineCard('Ivysaur',    '🌿', 'Common',   2, 0.12),
+    offlineCard('Charmander', '🔥', 'Common',   4, 0.17),
+    offlineCard('Charmeleon', '🔥', 'Common',   5, 0.12),
+    offlineCard('Squirtle',   '💧', 'Common',   7, 0.25),
+    offlineCard('Wartortle',  '💧', 'Common',   8, 0.12),
+    offlineCard('Caterpie',   '🐛', 'Common',  10, 0.12),
+    offlineCard('Metapod',    '🐛', 'Common',  11, 0.08),
+    offlineCard('Pidgey',     '🐦', 'Common',  16, 0.20),
+    offlineCard('Pidgeotto',  '🐦', 'Common',  17, 0.10),
+    offlineCard('Rattata',    '🐭', 'Common',  19, 0.09),
+    offlineCard('Ekans',      '🐍', 'Common',  23, 0.08),
+    offlineCard('Sandshrew',  '🏔', 'Common',  27, 0.08),
+    offlineCard('Clefairy',   '⭐', 'Common',  35, 0.12),
+    offlineCard('Vulpix',     '🦊', 'Common',  37, 0.11),
+    offlineCard('Jigglypuff', '🎵', 'Common',  39, 0.11),
+    offlineCard('Oddish',     '🌿', 'Common',  43, 0.12),
+    offlineCard('Paras',      '🍄', 'Common',  46, 0.14),
+    offlineCard('Meowth',     '🐱', 'Common',  52, 0.13),
+    offlineCard('Psyduck',    '💧', 'Common',  54, 0.19),
+    offlineCard('Mankey',     '🐒', 'Common',  56, 0.11),
+    offlineCard('Growlithe',  '🔥', 'Common',  58, 0.15),
+    offlineCard('Poliwag',    '💧', 'Common',  60, 0.08),
+    offlineCard('Abra',       '🔮', 'Common',  63, 0.13),
+    offlineCard('Machop',     '💪', 'Common',  66, 0.13),
+    offlineCard('Bellsprout', '🌱', 'Common',  69, 0.07),
+    offlineCard('Tentacool',  '🪼', 'Common',  72, 0.13),
+    offlineCard('Geodude',    '🪨', 'Common',  74, 0.12),
+    offlineCard('Ponyta',     '🐴', 'Common',  77, 0.09),
+    offlineCard('Slowpoke',   '🌀', 'Common',  79, 0.14),
+    offlineCard('Magikarp',   '🐟', 'Common', 129, 0.21),
+    offlineCard('Eevee',      '🦊', 'Common', 133, 0.17),
+    offlineCard('Dratini',    '🐲', 'Common', 147, 0.19),
   ],
   uncommon: [
-    offlineCard('Venomoth',   '🦋', 'Uncommon',  49),
-    offlineCard('Dugtrio',    '🏔', 'Uncommon',  51),
-    offlineCard('Persian',    '🐱', 'Uncommon',  53),
-    offlineCard('Golduck',    '💧', 'Uncommon',  55),
-    offlineCard('Primeape',   '🐒', 'Uncommon',  57),
-    offlineCard('Arcanine',   '🔥', 'Uncommon',  59),
-    offlineCard('Poliwhirl',  '💧', 'Uncommon',  61),
-    offlineCard('Kadabra',    '🔮', 'Uncommon',  64),
-    offlineCard('Machoke',    '💪', 'Uncommon',  67),
-    offlineCard('Haunter',    '👻', 'Uncommon',  93),
-    offlineCard('Chansey',    '🥚', 'Uncommon', 113),
-    offlineCard('Scyther',    '🗡', 'Uncommon', 123),
-    offlineCard('Jynx',       '💋', 'Uncommon', 124),
-    offlineCard('Electabuzz', '⚡', 'Uncommon', 125),
-    offlineCard('Magmar',     '🔥', 'Uncommon', 126),
-    offlineCard('Lapras',     '🦕', 'Uncommon', 131),
-    offlineCard('Snorlax',    '😴', 'Uncommon', 143),
-    offlineCard('Dragonair',  '🐲', 'Uncommon', 148),
+    offlineCard('Venomoth',   '🦋', 'Uncommon',  49, 0.12),
+    offlineCard('Dugtrio',    '🏔', 'Uncommon',  51, 0.12),
+    offlineCard('Persian',    '🐱', 'Uncommon',  53, 0.23),
+    offlineCard('Golduck',    '💧', 'Uncommon',  55, 0.10),
+    offlineCard('Primeape',   '🐒', 'Uncommon',  57, 0.09),
+    offlineCard('Arcanine',   '🔥', 'Uncommon',  59, 0.21),
+    offlineCard('Poliwhirl',  '💧', 'Uncommon',  61, 0.19),
+    offlineCard('Kadabra',    '🔮', 'Uncommon',  64, 0.18),
+    offlineCard('Machoke',    '💪', 'Uncommon',  67, 0.18),
+    offlineCard('Haunter',    '👻', 'Uncommon',  93, 0.24),
+    offlineCard('Chansey',    '🥚', 'Uncommon', 113, 0.31),
+    offlineCard('Scyther',    '🗡', 'Uncommon', 123, 0.08),
+    offlineCard('Jynx',       '💋', 'Uncommon', 124, 0.12),
+    offlineCard('Electabuzz', '⚡', 'Uncommon', 125, 0.09),
+    offlineCard('Magmar',     '🔥', 'Uncommon', 126, 0.09),
+    offlineCard('Lapras',     '🦕', 'Uncommon', 131, 0.12),
+    offlineCard('Snorlax',    '😴', 'Uncommon', 143, 0.27),
+    offlineCard('Dragonair',  '🐲', 'Uncommon', 148, 0.20),
   ],
   rare: [
-    offlineCard('Venusaur',   '🌺', 'Rare',   3),
-    offlineCard('Charizard',  '🐉', 'Rare',   6),
-    offlineCard('Blastoise',  '🐢', 'Rare',   9),
-    offlineCard('Butterfree', '🦋', 'Rare',  12),
-    offlineCard('Alakazam',   '🥄', 'Rare',  65),
-    offlineCard('Machamp',    '💪', 'Rare',  68),
-    offlineCard('Gengar',     '👻', 'Rare',  94),
-    offlineCard('Gyarados',   '🌊', 'Rare', 130),
-    offlineCard('Vaporeon',   '💧', 'Rare', 134),
-    offlineCard('Jolteon',    '⚡', 'Rare', 135),
-    offlineCard('Flareon',    '🔥', 'Rare', 136),
-    offlineCard('Aerodactyl', '🦕', 'Rare', 142),
-    offlineCard('Dragonite',  '🐉', 'Rare', 149),
+    offlineCard('Venusaur',   '🌺', 'Rare',   3, 0.75),
+    offlineCard('Charizard',  '🐉', 'Rare',   6, 6.50),
+    offlineCard('Blastoise',  '🐢', 'Rare',   9, 0.90),
+    offlineCard('Butterfree', '🦋', 'Rare',  12, 0.16),
+    offlineCard('Alakazam',   '🥄', 'Rare',  65, 1.20),
+    offlineCard('Machamp',    '💪', 'Rare',  68, 0.29),
+    offlineCard('Gengar',     '👻', 'Rare',  94, 2.00),
+    offlineCard('Gyarados',   '🌊', 'Rare', 130, 0.30),
+    offlineCard('Vaporeon',   '💧', 'Rare', 134, 0.39),
+    offlineCard('Jolteon',    '⚡', 'Rare', 135, 0.34),
+    offlineCard('Flareon',    '🔥', 'Rare', 136, 0.34),
+    offlineCard('Aerodactyl', '🦕', 'Rare', 142, 0.38),
+    offlineCard('Dragonite',  '🐉', 'Rare', 149, 0.80),
   ],
   holo: [
-    offlineCard('Raichu',    '⚡', 'Rare Holo',  26),
-    offlineCard('Ninetales', '🦊', 'Rare Holo',  38),
-    offlineCard('Clefable',  '⭐', 'Rare Holo',  36),
-    offlineCard('Articuno',  '❄️', 'Rare Holo', 144),
-    offlineCard('Zapdos',    '⚡', 'Rare Holo', 145),
-    offlineCard('Moltres',   '🔥', 'Rare Holo', 146),
-    offlineCard('Mewtwo',    '🔮', 'Rare Holo', 150),
-    offlineCard('Mew',       '🌟', 'Rare Holo', 151),
+    offlineCard('Raichu',    '⚡', 'Rare Holo',  26, 0.34),
+    offlineCard('Ninetales', '🦊', 'Rare Holo',  38, 0.90),
+    offlineCard('Clefable',  '⭐', 'Rare Holo',  36, 0.14),
+    offlineCard('Articuno',  '❄️', 'Rare Holo', 144, 0.33),
+    offlineCard('Zapdos',    '⚡', 'Rare Holo', 145, 0.95),
+    offlineCard('Moltres',   '🔥', 'Rare Holo', 146, 0.80),
+    offlineCard('Mewtwo',    '🔮', 'Rare Holo', 150, 1.66),
+    offlineCard('Mew',       '🌟', 'Rare Holo', 151, 4.20),
   ],
-  // Ultra/Secret reuse confirmed holo card images (Legendaries + Mewtwo/Mew)
-  // so the TCG card photo always matches the name shown
+  // Ultra use base card images — prices reflect sv3pt5 Double Rare equivalents
   ultra: [
-    offlineCard('Charizard ex',  '🐉', 'Double Rare',   6),
-    offlineCard('Mewtwo ex',     '🔮', 'Double Rare', 150),
-    offlineCard('Mew ex',        '🌟', 'Double Rare', 151),
-    offlineCard('Zapdos ex',     '⚡', 'Double Rare', 145),
-    offlineCard('Articuno ex',   '❄️', 'Double Rare', 144),
-    offlineCard('Moltres ex',    '🔥', 'Double Rare', 146),
-    offlineCard('Gyarados ex',   '🌊', 'Double Rare', 130),
-    offlineCard('Dragonite ex',  '🐉', 'Double Rare', 149),
-    offlineCard('Gengar ex',     '👻', 'Double Rare',  94),
-    offlineCard('Alakazam ex',   '🔮', 'Double Rare',  65),
+    offlineCard('Charizard ex',  '🐉', 'Double Rare',   6, 9.62),
+    offlineCard('Mewtwo ex',     '🔮', 'Double Rare', 150, 4.00),
+    offlineCard('Mew ex',        '🌟', 'Double Rare', 151, 7.20),
+    offlineCard('Zapdos ex',     '⚡', 'Double Rare', 145, 2.80),
+    offlineCard('Articuno ex',   '❄️', 'Double Rare', 144, 2.20),
+    offlineCard('Moltres ex',    '🔥', 'Double Rare', 146, 2.50),
+    offlineCard('Gyarados ex',   '🌊', 'Double Rare', 130, 2.00),
+    offlineCard('Dragonite ex',  '🐉', 'Double Rare', 149, 1.80),
+    offlineCard('Gengar ex',     '👻', 'Double Rare',  94, 2.40),
+    offlineCard('Alakazam ex',   '🔮', 'Double Rare',  65, 1.90),
   ],
+  // Secret/Hyper use base card images — prices are set to SIR/HR market equivalents
   secret: [
-    offlineCard('Charizard ✦',  '🌈🐉', 'Special Illustration Rare',   6),
-    offlineCard('Mewtwo ✦',     '🌈🔮', 'Special Illustration Rare', 150),
-    offlineCard('Mew ✦',        '🌈🌟', 'Special Illustration Rare', 151),
-    offlineCard('Zapdos ✦',     '🌈⚡', 'Special Illustration Rare', 145),
-    offlineCard('Articuno ✦',   '🌈❄️', 'Special Illustration Rare', 144),
-    offlineCard('Moltres ✦',    '🌈🔥', 'Special Illustration Rare', 146),
-    offlineCard('Dragonite ✦',  '🌈🐉', 'Special Illustration Rare', 149),
+    offlineCard('Charizard ✦',  '🌈🐉', 'Special Illustration Rare',   6, 480.24),
+    offlineCard('Mewtwo ✦',     '🌈🔮', 'Special Illustration Rare', 150,  95.00),
+    offlineCard('Mew ✦',        '🌈🌟', 'Special Illustration Rare', 151, 110.00),
+    offlineCard('Zapdos ✦',     '🌈⚡', 'Special Illustration Rare', 145, 117.44),
+    offlineCard('Articuno ✦',   '🌈❄️', 'Special Illustration Rare', 144, 113.00),
+    offlineCard('Moltres ✦',    '🌈🔥', 'Special Illustration Rare', 146, 112.00),
+    offlineCard('Dragonite ✦',  '🌈🐉', 'Special Illustration Rare', 149,  55.00),
   ],
   hyper: [
-    offlineCard('Charizard ★',  '🥇🐉', 'Hyper Rare',   6),
-    offlineCard('Mewtwo ★',     '🥇🔮', 'Hyper Rare', 150),
-    offlineCard('Mew ★',        '🥇🌟', 'Hyper Rare', 151),
-    offlineCard('Rayquaza ★',   '🥇🐉', 'Hyper Rare', 384),
+    offlineCard('Charizard ★',  '🥇🐉', 'Hyper Rare',   6, 250.00),
+    offlineCard('Mewtwo ★',     '🥇🔮', 'Hyper Rare', 150,  60.00),
+    offlineCard('Mew ★',        '🥇🌟', 'Hyper Rare', 151,  34.21),
+    offlineCard('Rayquaza ★',   '🥇🐉', 'Hyper Rare', 384,  80.00),
   ],
 };
 
@@ -930,11 +933,11 @@ function tierFromPrice(price) {
 }
 
 function estimateValue(card) {
-  // Use exact market price — no variance so duplicate cards always show the same price
-  if (card._marketPrice > 0) {
-    return parseFloat(card._marketPrice.toFixed(2));
-  }
-  // Fallback when no TCGPlayer data: midpoint of range, boosted for popular Pokémon
+  // 1. Use the card's own cached market price
+  if (card._marketPrice > 0) return parseFloat(card._marketPrice.toFixed(2));
+  // 2. Check the global price map (populated by background fetches) using card ID
+  if (card.id && priceMap[card.id] > 0) return parseFloat(priceMap[card.id].toFixed(2));
+  // 3. HOT_MONS-adjusted tier midpoint estimate
   const t = card.tier || getTier(card.rarity);
   const [mn, mx] = TIER[t]?.valueRange || TIER.common.valueRange;
   const base = (mn + mx) / 2;
@@ -1103,6 +1106,35 @@ async function fetchPricesInBackground(setId) {
         document.getElementById('svSetName').textContent.includes(SET_META.find(s=>s.id===setId)?.name||setId)) {
       renderSetView(setId);
     }
+  } catch(e) {}
+}
+
+// Fetch sv3pt5 (Pokémon 151) prices at startup so offline pool cards always
+// show real TCGPlayer prices rather than hardcoded fallbacks.
+async function fetchBasePrices() {
+  if (_priceFetchAttempted.has('sv3pt5')) return;
+  _priceFetchAttempted.add('sv3pt5');
+  try {
+    let page = 1;
+    while (true) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 15000);
+      const r = await fetch(
+        `https://api.pokemontcg.io/v2/cards?q=set.id:sv3pt5&pageSize=250&page=${page}&select=id,tcgplayer,cardmarket`,
+        { signal: ctrl.signal }
+      );
+      clearTimeout(t);
+      if (!r.ok) return;
+      const data = await r.json();
+      for (const c of (data.data || [])) {
+        const mp = extractMarketPrice(c);
+        if (mp > 0) priceMap[c.id] = mp;
+      }
+      if ((data.data || []).length < 250) break;
+      page++;
+    }
+    savePriceMap();
+    repriceInventoryFromPool(); // update any sv3pt5 cards already in inventory
   } catch(e) {}
 }
 
@@ -2777,8 +2809,9 @@ function injectSpecialCards_v2() {
 //  INIT
 // ════════════════════════════════════════
 load();
-loadPriceMap();   // fast: ~40KB price index only, not full pool data
+loadPriceMap();    // fast: ~40KB price index only, not full pool data
 migrateOldCache(); // one-time: moves pkpack_pools_v11 → per-set keys, then deletes old blob
+fetchBasePrices(); // background: keeps sv3pt5 prices fresh so offline pool cards are priced correctly
 // Patch inventory cards and reprice from price map — all synchronous and fast
 {
   const HP_BY_TIER = { hyper:'240', secret:'220', ultra:'170', holo:'130', rare:'110', uncommon:'90', common:'70' };
