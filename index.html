@@ -2681,20 +2681,58 @@ function renderSetView(setId) {
     return '<0.01%';
   }
 
+  // "1 in X packs" for a whole tier (not per-card)
+  function tierOneIn(tier) {
+    if (!availW[tier]) return null;
+    const pct = (availW[tier] / totalW) * 100;
+    if (pct <= 0) return null;
+    return Math.round(100 / pct);
+  }
+
   const RARITY_ORDER = ['common','uncommon','rare','holo','ultra','secret','hyper'];
   let totalCards = 0;
-  let html = '';
+
+  // Summary bar — only show rare+ tiers that actually exist in this set
+  const summaryPills = RARITY_ORDER.filter(t => !['common','uncommon'].includes(t) && (pool[t]||[]).length && availW[t])
+    .map(t => {
+      const tc = TIER[t];
+      const x = tierOneIn(t);
+      return `<span style="background:${tc.color}1a;color:${tc.color};border:1px solid ${tc.color}44;
+                padding:.25rem .65rem;border-radius:20px;font-size:.68rem;font-weight:800;white-space:nowrap">
+        ${tc.label}: 1 in ${x} packs
+      </span>`;
+    }).join('');
+
+  let html = summaryPills ? `
+    <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1.2rem;align-items:center">
+      <span style="font-size:.68rem;font-weight:700;color:var(--muted);margin-right:.2rem">Hit rates:</span>
+      ${summaryPills}
+    </div>` : '';
+
   for (const tier of RARITY_ORDER) {
     const cards = (pool[tier] || []).slice()
-      .sort((a, b) => estimateValue(b) - estimateValue(a)); // highest value first
+      .sort((a, b) => estimateValue(b) - estimateValue(a));
     if (!cards.length) continue;
     totalCards += cards.length;
     const tc = TIER[tier];
     const p = cardOdds(tier);
+    const x = tierOneIn(tier);
+
+    // Tier header: different wording for guaranteed slots vs rare+ slot
+    let tierDesc;
+    if (tier === 'common') {
+      tierDesc = `${cards.length} cards &nbsp;·&nbsp; 6 slots / pack &nbsp;·&nbsp; ${fmtOdds(p)} per card`;
+    } else if (tier === 'uncommon') {
+      tierDesc = `${cards.length} cards &nbsp;·&nbsp; 3 slots / pack &nbsp;·&nbsp; ${fmtOdds(p)} per card`;
+    } else {
+      const anyStr = x ? `any ${tc.label}: 1 in ${x} packs` : '';
+      tierDesc = `${cards.length} cards${anyStr ? ` &nbsp;·&nbsp; ${anyStr}` : ''} &nbsp;·&nbsp; this card: ${fmtOdds(p)} / pack`;
+    }
+
     html += `
       <div class="sv-tier-block">
         <div class="sv-tier-lbl" style="background:${tc.color}1a;color:${tc.color};border:1px solid ${tc.color}44">
-          ${tc.label} &nbsp;·&nbsp; ${cards.length} cards &nbsp;·&nbsp; ${fmtOdds(p)} / card / pack
+          ${tc.label} &nbsp;·&nbsp; ${tierDesc}
         </div>
         <div class="sv-grid">
           ${cards.map(c => {
@@ -2705,7 +2743,7 @@ function renderSetView(setId) {
               <div class="sv-card-info">
                 <div class="sv-card-name">${c.name}</div>
                 <div class="sv-card-sub">
-                  <span class="sv-card-odds">${fmtOdds(p)}</span>
+                  <span class="sv-card-odds" title="Chance per pack">${fmtOdds(p)}</span>
                   <span class="sv-card-val">${fmt(val)}</span>
                 </div>
               </div>
@@ -2715,7 +2753,7 @@ function renderSetView(setId) {
       </div>`;
   }
 
-  document.getElementById('svSubtitle').textContent = `${totalCards} cards · sorted by rarity`;
+  document.getElementById('svSubtitle').textContent = `${totalCards} cards · lowest rarity first`;
   document.getElementById('svContent').innerHTML = html;
 }
 
