@@ -952,6 +952,10 @@ function repriceInventoryFromPool() {
   if (!Object.keys(priceMap).length) return;
   let changed = false;
   for (const inv of S.inventory) {
+    // Skip cards that already have a definitive market price — don't let a
+    // priceMap lookup for the same ID (possibly a different card variant)
+    // override a real or hardcoded price.
+    if (inv._marketPrice > 0) continue;
     if (inv.id && priceMap[inv.id] !== undefined) {
       const v = parseFloat(priceMap[inv.id].toFixed(2));
       if (inv.value !== v) { inv.value = v; changed = true; }
@@ -1087,7 +1091,7 @@ async function fetchPricesInBackground(setId) {
     // Reprice inventory and any open pack cards
     repriceInventoryFromPool();
     for (const c of S.pending) {
-      if (c.id && fetched[c.id]) {
+      if (c.id && fetched[c.id] && !c._marketPrice) {
         c._marketPrice = fetched[c.id];
         c.value = parseFloat(fetched[c.id].toFixed(2));
         const badge = document.getElementById('vb_' + c.uid);
@@ -2855,8 +2859,8 @@ fetchBasePrices(); // background: keeps sv3pt5 prices fresh so offline pool card
   const HP_BY_TIER = { hyper:'240', secret:'220', ultra:'170', holo:'130', rare:'110', uncommon:'90', common:'70' };
   let changed = false;
   for (const inv of S.inventory) {
-    // Reprice from cached price map
-    if (inv.id && priceMap[inv.id] !== undefined) {
+    // Reprice from cached price map — skip cards with a definitive _marketPrice
+    if (!inv._marketPrice && inv.id && priceMap[inv.id] !== undefined) {
       const v = parseFloat(priceMap[inv.id].toFixed(2));
       if (inv.value !== v) { inv.value = v; changed = true; }
     }
