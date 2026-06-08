@@ -904,19 +904,23 @@ function extractMarketPrice(card) {
   const tp = card.tcgplayer?.prices;
   if (tp) {
     const order = ['holofoil','reverseHolofoil','normal','1stEditionHolofoil','1stEditionNormal'];
+    // Prefer market price, fall back through mid, directLow in priority order
     for (const v of order) {
-      const p = tp[v]?.market || tp[v]?.mid;
+      const p = tp[v]?.market || tp[v]?.mid || tp[v]?.directLow;
       if (p > 0) return p;
     }
     for (const v of Object.values(tp)) {
-      const p = v?.market || v?.mid;
+      const p = v?.market || v?.mid || v?.directLow;
       if (p > 0) return p;
     }
+    // Last resort: use low price (underestimates but beats a flat fallback)
+    for (const v of order) { const p = tp[v]?.low; if (p > 0) return p; }
+    for (const v of Object.values(tp)) { const p = v?.low; if (p > 0) return p; }
   }
-  // Try cardmarket prices
+  // CardMarket prices (trend → avg sell → avg1 → avg7 → avg30)
   const cm = card.cardmarket?.prices;
   if (cm) {
-    const p = cm.trendPrice || cm.averageSellPrice || cm.avg1;
+    const p = cm.trendPrice || cm.averageSellPrice || cm.avg1 || cm.avg7 || cm.avg30;
     if (p > 0) return p;
   }
   return null;
@@ -961,7 +965,10 @@ function repriceInventoryFromPool() {
       if (inv.value !== v) { inv.value = v; changed = true; }
     }
   }
-  if (changed) { save(); updateMoney(); }
+  if (changed) {
+    save(); updateMoney();
+    if (document.getElementById('collectionPage').classList.contains('active')) renderCollection();
+  }
 }
 
 // ════════════════════════════════════════
@@ -1574,7 +1581,7 @@ function renderCollection() {
   else if (sort==='name')     cards.sort((a,b)=>a.name.localeCompare(b.name));
   else if (sort==='dex')      cards.sort((a,b)=>dexNum(a)-dexNum(b)||a.name.localeCompare(b.name));
 
-  const totalVal = S.inventory.reduce((s,c)=>s+c.value,0);
+  const totalVal = S.inventory.reduce((s,c)=>s+estimateValue(c),0);
   document.getElementById('collSummary').textContent = `${S.inventory.length} cards · ${fmt(totalVal)} value`;
 
   const grid = document.getElementById('invGrid');
@@ -1609,14 +1616,14 @@ function renderCollection() {
           <div class="inv-name">${c.name}</div>
           <div class="inv-meta">
             <span class="inv-rar" style="color:${tc.color}">${tc.label}</span>
-            <span class="inv-val">${fmt(c.value)}</span>
+            <span class="inv-val">${fmt(estimateValue(c))}</span>
           </div>
         </div>
         <div class="inv-sell-overlay">
           <button class="inv-sell-btn"
                   style="background:${tc.color};color:${sellTxt}"
                   onclick="event.stopPropagation();quickSell(${c.uid})">
-            Sell ${fmt(c.value)}
+            Sell ${fmt(estimateValue(c))}
           </button>
         </div>
       </div>`;
@@ -1633,7 +1640,7 @@ function toggleSel(uid) {
 function updateSelBtn() {
   const btn = document.getElementById('sellSelBtn');
   if (!selected.size) { btn.classList.remove('show'); return; }
-  const total = S.inventory.filter(c=>selected.has(c.uid)).reduce((s,c)=>s+c.value,0);
+  const total = S.inventory.filter(c=>selected.has(c.uid)).reduce((s,c)=>s+estimateValue(c),0);
   btn.textContent = `💰 Sell Selected (${fmt(total)})`;
   btn.classList.add('show');
 }
@@ -1663,7 +1670,7 @@ function openCardDetail(uid) {
   document.getElementById('cdRar').textContent  = tc.label;
   document.getElementById('cdRar').style.color  = tc.color;
   document.getElementById('cdHp').textContent   = c.hp ? `${c.hp} HP` : '';
-  document.getElementById('cdVal').textContent  = fmt(c.value);
+  document.getElementById('cdVal').textContent  = fmt(estimateValue(c));
 
   // Attacks
   const atksEl = document.getElementById('cdAtks');
@@ -1682,7 +1689,7 @@ function openCardDetail(uid) {
   const selBtn = document.getElementById('cdSelBtn');
   selBtn.textContent = selected.has(uid) ? '✓ Selected' : '+ Select';
   selBtn.classList.toggle('active', selected.has(uid));
-  document.getElementById('cdSellBtn').textContent = `💰 Sell ${fmt(c.value)}`;
+  document.getElementById('cdSellBtn').textContent = `💰 Sell ${fmt(estimateValue(c))}`;
 
   document.getElementById('cardDetail').classList.add('open');
 }
@@ -1705,26 +1712,28 @@ function cdToggleSel() {
 function cdSell() {
   if (_cdUid === null) return;
   const c = S.inventory.find(x=>x.uid===_cdUid); if(!c) return;
-  S.money+=c.value; S.stats.earned+=c.value;
+  const price = estimateValue(c);
+  S.money+=price; S.stats.earned+=price;
   S.inventory=S.inventory.filter(x=>x.uid!==_cdUid); selected.delete(_cdUid);
   document.getElementById('cardDetail').classList.remove('open');
   _cdUid = null;
-  updateMoney(); toast(`Sold ${c.name} for ${fmt(c.value)}`,'ok');
+  updateMoney(); toast(`Sold ${c.name} for ${fmt(price)}`,'ok');
   renderCollection();
 }
 
 function quickSell(uid) {
   const c = S.inventory.find(x=>x.uid===uid); if(!c) return;
-  S.money+=c.value; S.stats.earned+=c.value;
+  const price = estimateValue(c);
+  S.money+=price; S.stats.earned+=price;
   S.inventory=S.inventory.filter(x=>x.uid!==uid); selected.delete(uid);
-  updateMoney(); toast(`Sold ${c.name} for ${fmt(c.value)}`,'ok');
+  updateMoney(); toast(`Sold ${c.name} for ${fmt(price)}`,'ok');
   renderCollection();
 }
 
 function sellSelected() {
   if (!selected.size) return;
   const toSell=S.inventory.filter(c=>selected.has(c.uid));
-  const earned=toSell.reduce((s,c)=>s+c.value,0);
+  const earned=toSell.reduce((s,c)=>s+estimateValue(c),0);
   S.money+=earned; S.stats.earned+=earned;
   S.inventory=S.inventory.filter(c=>!selected.has(c.uid)); selected.clear();
   updateMoney(); toast(`Sold ${toSell.length} cards for ${fmt(earned)}!`,'ok');
@@ -1734,7 +1743,7 @@ function sellSelected() {
 function sellCommons() {
   const commons=S.inventory.filter(c=>c.tier==='common');
   if (!commons.length) { toast('No common cards to sell.'); return; }
-  const earned=commons.reduce((s,c)=>s+c.value,0);
+  const earned=commons.reduce((s,c)=>s+estimateValue(c),0);
   S.money+=earned; S.stats.earned+=earned;
   S.inventory=S.inventory.filter(c=>c.tier!=='common');
   commons.forEach(c=>selected.delete(c.uid));
@@ -1745,7 +1754,7 @@ function sellCommons() {
 function sellUncommons() {
   const uncommons=S.inventory.filter(c=>c.tier==='uncommon');
   if (!uncommons.length) { toast('No uncommon cards to sell.'); return; }
-  const earned=uncommons.reduce((s,c)=>s+c.value,0);
+  const earned=uncommons.reduce((s,c)=>s+estimateValue(c),0);
   S.money+=earned; S.stats.earned+=earned;
   S.inventory=S.inventory.filter(c=>c.tier!=='uncommon');
   uncommons.forEach(c=>selected.delete(c.uid));
@@ -1759,7 +1768,7 @@ function sellUncommons() {
 function renderStats() {
   const st = S.stats;
   const net = st.earned-st.spent;
-  const collVal = S.inventory.reduce((s,c)=>s+c.value,0);
+  const collVal = S.inventory.reduce((s,c)=>s+estimateValue(c),0);
 
   document.getElementById('statsGrid').innerHTML = `
     <div class="stat-box"><div class="stat-lbl">Packs Opened</div><div class="stat-val">${st.packsOpened}</div></div>
