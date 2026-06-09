@@ -1037,13 +1037,36 @@ function loadPoolForSet(setId) {
     const raw = JSON.parse(d);
     cardPools[setId] = retierPool(raw); // fix any stale tier assignments
     savePoolForSet(setId);              // persist corrected pool
-    fetchPricesInBackground(setId);
     return true;
   } catch(e) { return false; }
 }
 
-// Tracks sets we've already attempted a background price fetch for this session
+// True if any real (non-offline) card in this set's pool lacks a market price.
+function poolNeedsPrices(setId) {
+  const pool = cardPools[setId];
+  if (!pool) return false;
+  for (const tier of Object.values(pool)) {
+    if (!Array.isArray(tier)) continue;
+    for (const c of tier) {
+      if (c.id && !c.emoji && !(c._marketPrice > 0)) return true;
+    }
+  }
+  return false;
+}
+
+// Tracks sets we've already attempted a background price fetch for this session.
+// _priceFetchPromises lets callers await an in-flight or completed fetch.
 const _priceFetchAttempted = new Set();
+const _priceFetchPromises = {};
+
+// Awaitable, deduped entry point. Returns a promise that resolves when this
+// set's prices have been fetched (or immediately if already done/in-flight).
+function ensurePrices(setId) {
+  if (_priceFetchPromises[setId]) return _priceFetchPromises[setId];
+  const p = fetchPricesInBackground(setId);
+  _priceFetchPromises[setId] = p;
+  return p;
+}
 
 async function fetchPricesInBackground(setId) {
   if (_priceFetchAttempted.has(setId)) return;
@@ -1122,9 +1145,10 @@ async function fetchPricesInBackground(setId) {
 
 // Fetch sv3pt5 (Pokémon 151) prices at startup so offline pool cards always
 // show real TCGPlayer prices rather than hardcoded fallbacks.
+let _basePricesFetched = false;
 async function fetchBasePrices() {
-  if (_priceFetchAttempted.has('sv3pt5')) return;
-  _priceFetchAttempted.add('sv3pt5');
+  if (_basePricesFetched) return;
+  _basePricesFetched = true;
   try {
     let page = 1;
     while (true) {
@@ -1167,9 +1191,15 @@ function migrateOldCache() {
 const API_FIELDS = 'id,name,images,attacks,hp,rarity,subtypes,nationalPokedexNumbers,number,tcgplayer,cardmarket';
 
 async function fetchPool(setId) {
-  if (cardPools[setId]) return false;
+  if (cardPools[setId]) {
+    if (poolNeedsPrices(setId)) { showLoad('Updating prices…'); await ensurePrices(setId); hideLoad(); }
+    return false;
+  }
   // Check per-set localStorage cache before hitting the network
-  if (loadPoolForSet(setId)) return false;
+  if (loadPoolForSet(setId)) {
+    if (poolNeedsPrices(setId)) { showLoad('Updating prices…'); await ensurePrices(setId); hideLoad(); }
+    return false;
+  }
 
   const setName = SET_META.find(s=>s.id===setId)?.name || setId;
   showLoad(`Loading ${setName}…`);
@@ -1238,7 +1268,9 @@ async function fetchPool(setId) {
     cardPools[setId] = { ...pools, _live: true };
     savePoolForSet(setId);
     repriceInventoryFromPool();
-    fetchPricesInBackground(setId); // fill missing prices if GitHub was used as fallback
+    // If the GitHub backup was used (no prices), wait for prices before returning
+    // so the pack draw shows real values. The main source already includes prices.
+    if (poolNeedsPrices(setId)) { showLoad('Updating prices…'); await ensurePrices(setId); }
     hideLoad();
     return false;
   }
